@@ -1,0 +1,26 @@
+{
+  "name": "team-hub",
+  "version": "1.0.0",
+  "description": "チームのタスク・カレンダー・議事録(録音して文字起こし)・資料をまとめて管理するツール。Cloudflareの無料枠で動きます",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler d1 migrations apply DB --local && wrangler dev --port 8791",
+    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "reset:local": "rm -rf .wrangler/state"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": { "description": "メンバー・タスク・議事録などを保存するデータベースです。名前はそのままでかまいません。" },
+      "SOURCE_FILES": { "description": "情報源のファイル（PDFなど）を保管する場所です。名前はそのままでかまいません。" }
+    }
+  },
+  "devDependencies": {
+    "wrangler": "^4.148.0"
+  },
+  "dependencies": {
+    "hono": "^4.13.13"
+  },
+  "license": "MIT"
+}

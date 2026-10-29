@@ -1,0 +1,19 @@
+{
+  // チーム管理ツール(配布版)。Cloudflare Workers + D1 + Workers AI
+  // 「Deploy to Cloudflare」ボタンで、使う人のアカウントにデータベース・ファイル置き場・AIが自動で用意される
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "team-hub",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  // Cloudflare内蔵のAI(録音の文字起こし用。無料枠の範囲で使う)
+  "ai": { "binding": "AI" },
+  // 情報源のファイル(PDFなど)の保管場所。無料で1GBまで、1ファイル25MBまで
+  "kv_namespaces": [{ "binding": "SOURCE_FILES" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "team-hub-db" }]
+}
