@@ -26,19 +26,16 @@ export function renderSetup($app) {
   const t = today();
   $app.innerHTML = `<div class="authbox card">
     <h1>はじめての設定</h1>
-    <p class="small">このツールを使い始めるための設定です。ここで入れた人が<b>管理者（記録係）</b>になります。<br>
-    メンバーは、あとで「メンバー」画面から招待リンクを送って追加します。</p>
+    <p class="small">ここを入れれば、すぐ使えます。入れた人が<b>管理者</b>になります。ほかの方は、あとで招待リンクから入れます。</p>
     <form id="setupForm">
-      <h2>プロジェクト</h2>
-      <label class="fld"><span>プロジェクト名</span><input name="project_name" required placeholder="例：秋のイベント出店プロジェクト"></label>
-      <label class="fld"><span>チーム名（短く）</span><input name="short_name" placeholder="例：〇〇ブース（空欄ならプロジェクト名）"></label>
-      <div class="row"><label class="fld"><span>開始日</span><input type="date" name="start_date" value="${t}" required></label>
-        <label class="fld"><span>終了日</span><input type="date" name="end_date" value="${addMonths(t, 6)}" required></label></div>
-      <h2>あなた（管理者）</h2>
-      <label class="fld"><span>呼び名</span><input name="name" required placeholder="例：たろう"></label>
-      <label class="fld"><span>ログインID</span><input name="login_id" required autocomplete="username" pattern="[A-Za-z0-9_.\\-]{3,32}"></label>
+      <label class="fld"><span>チームやプロジェクトの名前</span><input name="project_name" required placeholder="例：秋のイベント出店チーム"></label>
+      <input type="hidden" name="short_name" value="">
+      <input type="hidden" name="start_date" value="${t}">
+      <input type="hidden" name="end_date" value="${addMonths(t, 6)}">
+      <label class="fld"><span>あなたの呼び名</span><input name="name" required placeholder="例：たろう"></label>
+      <label class="fld"><span>ログインID（半角の英語と数字で3文字以上）</span><input name="login_id" required autocomplete="username" autocapitalize="off" pattern="[A-Za-z0-9_.\\-]{3,32}" placeholder="例：taro01"></label>
       ${pwFields}
-      <p class="muted small">${RULE}パスワードを忘れたときは、ほかの記録係に再設定リンクを作ってもらいます（記録係を2人以上にしておくと安心です）。</p>
+      <p class="muted small">パスワードは8文字以上です。ログインIDとパスワードは、忘れないように控えてください。</p>
       <div id="authMsg" class="late"></div>
       <button class="btn">はじめる</button>
     </form></div>`;

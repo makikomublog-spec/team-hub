@@ -3,3 +3,7 @@ node_modules
 .dev.vars
 .DS_Store
 wrangler.install.jsonc
+
+setup/src/app-bundle.js
+setup/.dev.vars
+setup/.wrangler

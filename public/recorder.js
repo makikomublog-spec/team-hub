@@ -135,13 +135,15 @@ export function renderRecorder($app, projectId) {
     <p><a href="#/p/${projectId}/minutes">← 議事録一覧</a></p>
     <h1>🎙 録音して文字起こし</h1>
     <div class="card steps">
-      <b>準備</b>
+      <b>録音のしかた</b>
       <ol>
-        <li>このページは <b>Google Chrome</b> で開いてください。</li>
-        <li>オンライン会議（oVice・Zoom・Google Meet など）は <b>Chromeのタブ</b> で開いておくのがおすすめです（アプリ版の場合は「画面全体」を選びます）。</li>
-        <li>「録音開始」を押すと、①マイクの許可 → ②共有する画面の選択が出ます。②では <b>会議のタブを選び、「タブの音声も共有する」をオン</b> にしてください。</li>
-        <li>録音の前に、参加者に「録音して議事録にします」と伝えてください。</li>
+        <li>このページと会議を、どちらも <b>Google Chrome</b> のタブで開きます。</li>
+        <li>参加者に「録音して議事録にします」と伝えます。</li>
+        <li>下の赤い「録音開始」を押します。</li>
+        <li>マイクの確認が出たら <b>「許可する」</b> を押します。</li>
+        <li>共有の画面が出たら、<b>「Chromeタブ」→ 会議のタブ</b> の順に選びます。<b>「タブの音声も共有する」がオン</b>になっていることを確かめて、<b>「共有」</b> を押します。</li>
       </ol>
+      <p class="muted small">Windowsで会議をアプリ（Zoomアプリなど）で開いている場合は、「画面全体」を選び、「システムの音声も共有する」をオンにします。Macのアプリの音は取り込めないので、会議をChromeのタブで開いてください。</p>
     </div>
     <div class="card recpanel">
       <div class="row">
@@ -199,7 +201,7 @@ async function start() {
   try {
     mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
   } catch {
-    return setStatus("⚠ マイクが使えませんでした。ブラウザのマイクの許可を確認してください。", "warn");
+    return setStatus("⚠ マイクが使えませんでした。画面の上のアドレス欄の左にあるマークを押して、マイクを「許可」にしてから、もう一度「録音開始」を押してください。", "warn");
   }
   try {
     screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true, systemAudio: "include", selfBrowserSurface: "exclude" });
@@ -209,7 +211,7 @@ async function start() {
   }
   if (!screen.getAudioTracks().length) {
     mic.getTracks().forEach((t) => t.stop()); screen.getTracks().forEach((t) => t.stop());
-    return setStatus("⚠ 相手の音が取り込めていません。共有するときに「タブの音声も共有する」をオンにしてください。", "warn");
+    return setStatus("⚠ 録音はまだ始まっていません。相手の音が入らない選び方になっていました。もう一度「録音開始」を押して、「Chromeタブ」から会議のタブを選び、「タブの音声も共有する」をオンにしてください。", "warn");
   }
   const ctx = new AudioContext({ sampleRate: RATE });
   await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" })));

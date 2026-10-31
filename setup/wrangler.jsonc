@@ -1,0 +1,13 @@
+{
+  // 設置ページ。ここにはチームのデータを置かない（鍵も保存しない）
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "team-hub-setup",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": { "enabled": false }
+}

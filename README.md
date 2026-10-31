@@ -24,41 +24,21 @@
 
 ## はじめかた
 
-GitHubのアカウントは要りません。**1行コピーして貼り付けるだけ** です。
+> **いまは試験公開中です。** 本物のCloudflareでの設置と文字起こしは、これから協力者の方に確認していただきます。
 
-### 用意するもの（無料）
-- **Cloudflareのアカウント** … https://dash.cloudflare.com/sign-up
+パソコンのGoogle Chromeで、次のページを開いて、案内どおりに進めるだけです。パソコンに何かを入れることはありません。GitHubのアカウントも要りません。
 
-### 1. 黒い画面を開いて、1行貼り付ける
+https://team-hub-setup.makikomublog.workers.dev
 
-**Macの場合**
+やることは3つです。
 
-「ターミナル」を開きます（`command` + `スペース` を押して「ターミナル」と入力し、`return`）。
-下の1行をコピーして貼り付け、`return` を押します。
+1. Cloudflare（ツールを置く場所）に無料登録する
+2. 「鍵」を作って、ページに貼り付ける
+3. 「作る」を押す
 
-```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/makikomublog-spec/team-hub/main/install.sh)"
-```
+作るのはチームで1人だけです。できたら「はじめての設定」を済ませて、ほかの方を招待します。
 
-**Windowsの場合**
-
-「PowerShell」を開きます（スタートメニューで「PowerShell」と入力して開く）。
-下の1行をコピーして貼り付け、`Enter` を押します。
-
-```powershell
-irm https://raw.githubusercontent.com/makikomublog-spec/team-hub/main/install.ps1 | iex
-```
-
-### 2. ブラウザで許可する
-
-ブラウザにCloudflareの画面が開くので、ログインして **「Allow（許可）」** を押します。
-黒い画面に戻ると、自動で続きが進みます。何か質問が出たら、画面の案内に答えてください。
-
-### 3. できたサイトを **すぐに** 開く
-黒い画面に `https://team-hub.（あなたのアカウント名）.workers.dev` が表示され、ブラウザでも開きます。**すぐに** 「はじめての設定」を済ませて、このURLをブックマークしてください。
-最初に設定した人が管理者になります。
-
-### 4. メンバーを招待する
+### メンバーを招待する
 「メンバー」→「＋ メンバーを追加」→ その人のカードの **「✉️ 招待リンク」** を押します。
 出てきたリンクをコピーして、**本人だけに** 送ってください（7日間・1回だけ使えます）。
 受け取った人がリンクを開いて、ログインIDとパスワードを決めれば使えるようになります。
@@ -67,11 +47,32 @@ irm https://raw.githubusercontent.com/makikomublog-spec/team-hub/main/install.ps
 
 ## よくある質問
 
-**Q. 黒い画面が怖い。パソコンは大丈夫？**
-ツールの部品は、あなたのホームフォルダの `.team-hub` の中にだけ入ります。パソコンの設定は変わりません。設置が終わったら、黒い画面は閉じて大丈夫です。
+**Q. 鍵は安全？**
+鍵はツールを作る間だけ使い、保存しません。この鍵でできるのはツールを置くことだけで、支払いやパスワードの変更はできません。完成の画面に消し方があります。設置ページの中身は、このページの `setup` フォルダで公開しています。
 
 **Q. 新しい版に更新したい**
-同じ1行をもう一度貼り付けてください。データはそのまま残ります。
+設置ページをもう一度はじめから進めてください。データはそのまま残ります。
+
+**Q. 要らなくなった。消すには？**
+Cloudflareの管理画面（https://dash.cloudflare.com）で、次の3つを削除します。**議事録やタスクなどのデータもすべて消え、元に戻せません。** 必要なものは先に控えてください。
+
+- サイト（Workers）：`team-hub`
+- データベース（D1）：`team-hub-db`
+- ファイル置き場（KV）：`team-hub-files`
+
+
+**Q. パソコンに詳しいので、自分のパソコンから設置したい**
+Macはターミナルで次の1行を実行します（Node.jsなどの部品が約400MB、ホームフォルダの `.team-hub` に入ります）。
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/makikomublog-spec/team-hub/main/install.sh)"
+```
+
+WindowsはPowerShellで次の1行を実行します（Windowsでの動作は未確認です）。
+
+```powershell
+irm https://raw.githubusercontent.com/makikomublog-spec/team-hub/main/install.ps1 | iex
+```
 
 **Q. GitHubのアカウントがあるので、ボタンで設置したい**
 こちらのボタンからも設置できます。

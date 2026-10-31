@@ -8,7 +8,10 @@
   "scripts": {
     "dev": "wrangler d1 migrations apply DB --local && wrangler dev --port 8791",
     "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
-    "reset:local": "rm -rf .wrangler/state"
+    "reset:local": "rm -rf .wrangler/state",
+    "setup:build": "node scripts/build-setup.mjs",
+    "setup:dev": "node scripts/build-setup.mjs && cd setup && wrangler dev --port 8792",
+    "setup:deploy": "node scripts/build-setup.mjs && cd setup && wrangler deploy"
   },
   "cloudflare": {
     "bindings": {
