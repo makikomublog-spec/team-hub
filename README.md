@@ -7,8 +7,6 @@
 - Cloudflareの **無料枠** で動きます
 - パソコンでもスマホでも、ブラウザから使えます（録音はパソコンのGoogle Chromeで）
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/makikomublog-spec/team-hub)
-
 ---
 
 ## できること
@@ -24,25 +22,40 @@
 
 ---
 
-## はじめかた（15分くらい）
+## はじめかた
 
-### 用意するもの（どちらも無料）
-- **GitHubのアカウント** … https://github.com/signup
+GitHubのアカウントは要りません。**1行コピーして貼り付けるだけ** です。
+
+### 用意するもの（無料）
 - **Cloudflareのアカウント** … https://dash.cloudflare.com/sign-up
 
-### 1. ボタンを押す
-上の **「Deploy to Cloudflare」** ボタンを押します。
-Cloudflareにログインし、GitHubとつなぐように聞かれたら許可します。
+### 1. 黒い画面を開いて、1行貼り付ける
 
-### 2. 名前を決めて「作成」
-- プロジェクトの名前（サイトのURLになります。例：`my-team-hub`）
-- データベース・ファイル置き場の名前は **そのままでOK**
+**Macの場合**
 
-「作成して公開」を押すと、2〜3分で完成します。
-データベース・ファイル置き場・文字起こしのAIは、自動で用意されます。
+「ターミナル」を開きます（`command` + `スペース` を押して「ターミナル」と入力し、`return`）。
+下の1行をコピーして貼り付け、`return` を押します。
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/makikomublog-spec/team-hub/main/install.sh)"
+```
+
+**Windowsの場合**
+
+「PowerShell」を開きます（スタートメニューで「PowerShell」と入力して開く）。
+下の1行をコピーして貼り付け、`Enter` を押します。
+
+```powershell
+irm https://raw.githubusercontent.com/makikomublog-spec/team-hub/main/install.ps1 | iex
+```
+
+### 2. ブラウザで許可する
+
+ブラウザにCloudflareの画面が開くので、ログインして **「Allow（許可）」** を押します。
+黒い画面に戻ると、自動で続きが進みます。何か質問が出たら、画面の案内に答えてください。
 
 ### 3. できたサイトを **すぐに** 開く
-`https://（名前）.（あなたのアカウント名）.workers.dev` が表示されたら、**すぐに開いて** 「はじめての設定」を済ませてください。
+黒い画面に `https://team-hub.（あなたのアカウント名）.workers.dev` が表示され、ブラウザでも開きます。**すぐに** 「はじめての設定」を済ませて、このURLをブックマークしてください。
 最初に設定した人が管理者になります。
 
 ### 4. メンバーを招待する
@@ -53,6 +66,17 @@ Cloudflareにログインし、GitHubとつなぐように聞かれたら許可�
 ---
 
 ## よくある質問
+
+**Q. 黒い画面が怖い。パソコンは大丈夫？**
+ツールの部品は、あなたのホームフォルダの `.team-hub` の中にだけ入ります。パソコンの設定は変わりません。設置が終わったら、黒い画面は閉じて大丈夫です。
+
+**Q. 新しい版に更新したい**
+同じ1行をもう一度貼り付けてください。データはそのまま残ります。
+
+**Q. GitHubのアカウントがあるので、ボタンで設置したい**
+こちらのボタンからも設置できます。
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/makikomublog-spec/team-hub)
 
 **Q. パスワードを忘れた**
 記録係に頼んで、メンバー画面の「🔑 再設定リンク」を送ってもらってください。
