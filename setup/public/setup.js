@@ -81,7 +81,8 @@ function key(message) {
     <ol class="do">
       <li>下の緑のボタンを押します。Cloudflareの画面が別のタブで開きます。<br>
         <a class="btn" href="${TOKEN_URL}" target="_blank" rel="noopener">鍵を作る画面を開く</a>
-        <span class="small">ログインの画面が出たら、登録したメールアドレスとパスワードを入れます。</span></li>
+        <span class="small">ログインの画面が出たら、登録したメールアドレスとパスワードを入れます。<br>
+        「新しいものを出荷する」「ドメインを追加する」などを選ぶ画面が出たら、何も選びません。このタブに戻って、緑のボタンをもう一度押します。</span></li>
       <li>画面をいちばん下まで動かして、<b class="label">Continue to summary</b>（続ける）を押します。<br><span class="small">日本語で表示されていたら、同じ位置のボタンを押します。ほかの欄は変えません。</span></li>
       <li><b class="label">Create Token</b>（トークンを作成）を押します。</li>
       <li>長い文字が出ます。その横の<b class="label">Copy</b>（コピー）を押します。</li>
@@ -110,7 +111,7 @@ function key(message) {
     btn.disabled = false; btn.textContent = "この鍵で進む";
     if (!r.ok) { msg.innerHTML = `<div class="err">${esc(r.message)}</div>`; return; }
     s.accounts = r.accounts;
-    if (r.accounts.length === 1) { s.accountId = r.accounts[0].id; build(); }
+    if (r.accounts.length === 1) { s.accountId = r.accounts[0].id; place(); }
     else chooseAccount();
   }
 }
@@ -120,7 +121,49 @@ function chooseAccount() {
     <p>アカウントが複数あります。迷ったら、いちばん上のままで大丈夫です。</p>
     ${s.accounts.map((a, i) => `<label class="acct"><input type="radio" name="acct" value="${esc(a.id)}" ${i === 0 ? "checked" : ""}> ${esc(a.name)}</label>`).join("")}
     <button class="btn" id="next">このアカウントに作る</button>`);
-  on("next", () => { s.accountId = document.querySelector("input[name=acct]:checked").value; build(); });
+  on("next", () => { s.accountId = document.querySelector("input[name=acct]:checked").value; place(); });
+}
+
+// 住所の名前を選べるアカウントなら名前の画面へ。途中まで作ってあるときは、住所はもう決まっている
+async function place() {
+  if (s.doneTo > 0) return build();
+  page(3, `<h1>確かめています…</h1>`);
+  const r = await step("place");
+  if (!r.ok) {
+    if (r.kind === "key") { s.token = ""; return key(r.message); }
+    page(3, `<h1>うまくいきませんでした</h1><div class="err">${esc(r.message)}</div><button class="btn" id="again">もう一度押す</button>`);
+    return on("again", place);
+  }
+  if (r.canName) nameForm();
+  else build();
+}
+
+function nameForm(message) {
+  s.siteName ||= "team-" + crypto.randomUUID().replaceAll("-", "").slice(0, 8);
+  page(3, `<h1>サイトの住所の名前を決めます</h1>
+    <p>住所に入る名前です。招待した人にも見えるので、メールアドレスや本名は入れないでください。</p>
+    <p>入っている名前のままでも使えます。</p>
+    ${message ? `<div class="err">${esc(message)}</div>` : ""}
+    <label for="siteName"><b>名前</b></label>
+    <input type="text" id="siteName" value="${esc(s.siteName)}" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <p class="small">半角の英語の小文字・数字・「-」で、32文字まで。例：sakura-team</p>
+    <p>できあがる住所</p>
+    <span class="url" id="preview"></span>
+    <div id="nameMsg"></div>
+    <button class="btn" id="next">この名前で進む</button>`);
+  const box = document.getElementById("siteName"), preview = document.getElementById("preview");
+  const value = () => box.value.normalize("NFKC").trim().toLowerCase();
+  const show = () => { preview.textContent = `https://team-hub.${value() || "…"}.workers.dev`; };
+  box.oninput = show;
+  show();
+  on("next", () => {
+    if (!/^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/.test(value())) {
+      document.getElementById("nameMsg").innerHTML = `<div class="note">使えるのは、半角の英語の小文字・数字・「-」だけです。「-」は最初と最後には使えません。</div>`;
+      return box.focus();
+    }
+    s.siteName = value();
+    build();
+  });
 }
 
 function build() {
@@ -128,9 +171,11 @@ function build() {
     <p>ボタンを押すと、自動で進みます。終わるまでこの画面を閉じないでください。</p>
     <ul class="tasks" id="tasks">${TASKS.map(([k, label]) => `<li data-k="${k}">${label}</li>`).join("")}<li data-k="live">開けるようになるのを待っています</li></ul>
     <div id="buildMsg"></div>
-    <button class="btn" id="run">作る</button>`);
+    <button class="btn" id="run">作る</button>
+    ${s.siteName && !s.doneTo ? `<button class="back" id="back">住所の名前を変える</button>` : ""}`);
   paint();
   on("run", run);
+  on("back", () => nameForm());
 }
 
 function paint(doing) {
@@ -144,10 +189,11 @@ function paint(doing) {
 async function run() {
   const btn = document.getElementById("run"), msg = document.getElementById("buildMsg");
   btn.disabled = true; btn.textContent = "作っています…"; msg.innerHTML = "";
+  document.getElementById("back")?.remove();
   for (let i = s.doneTo; i < TASKS.length; i++) {
     const [name] = TASKS[i];
     paint(name);
-    const r = await step(name);
+    const r = await step(name, name === "address" ? { siteName: s.siteName } : {});
     if (!r.ok) return fail(r, btn, msg);
     const { ok, ...rest } = r;
     if (name === "database") s.updating = rest.updating;
@@ -167,6 +213,7 @@ async function run() {
 
 function fail(r, btn, msg) {
   if (r.kind === "key") { s.token = ""; return key(r.message); }
+  if (r.kind === "name") return nameForm(r.message);
   msg.innerHTML = `<div class="err">${esc(r.message)}${r.code ? `<br><span class="small">（番号：${esc(r.code)}）</span>` : ""}</div>`;
   btn.disabled = false; btn.textContent = "もう一度押す";
   paint();
@@ -179,6 +226,7 @@ function finish(slow) {
     ${slow ? `<div class="note">サイトが開けるようになるまで、少し時間がかかることがあります。開けないときは、10分ほど待ってからもう一度開いてください。</div>` : ""}
     <p>これが、あなたのツールの住所です。</p>
     <span class="url" id="url">${esc(s.url)}</span>
+    ${s.work.nameKept ? `<div class="note">決めていただいた名前には変えられなかったので、今の住所のまま作りました。名前を変えるときは、Cloudflareの「Workers &amp; Pages」で「Your subdomain」の横の「Change」を押します。メンバーを招待する前に変えてください。</div>` : ""}
     <a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener">ツールを開く</a>
     <button class="btn sub" id="copy">住所をコピーする</button>
     ${s.updating ? "" : `<div class="note"><b>開いたら、すぐにしてください</b><br>

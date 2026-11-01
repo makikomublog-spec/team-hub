@@ -31,6 +31,8 @@ async function route(req, raw) {
   const auth = req.headers.authorization || "";
   state.log.push({ m, p });
 
+  // 確認の場面を切り替える（subdomain / others / taken / refuseChange）
+  if (p === "/__mock") { Object.assign(state, body()); return { body: { ok: true } }; }
   if (p === "/api/auth/state") return { body: { ok: true } };
   if (p.endsWith("/workers/assets/upload")) {
     if (auth !== "Bearer upload-jwt") return bad(10000, "bad upload jwt", 401);
@@ -48,7 +50,13 @@ async function route(req, raw) {
   if (!a) return bad(7003, "not found", 404);
   const r = a[2];
   if (r === "/workers/subdomain" && m === "GET") return state.subdomain ? { body: ok({ subdomain: state.subdomain }) } : bad(10007, "no subdomain", 404);
-  if (r === "/workers/subdomain" && m === "PUT") { state.subdomain = body().subdomain; return { body: ok({ subdomain: state.subdomain }) }; }
+  if (r === "/workers/subdomain" && m === "PUT") {
+    if (state.taken === body().subdomain) return bad(10031, "subdomain already taken", 409);
+    if (state.refuseChange && state.subdomain) return bad(10032, "pretend refusal", 400);
+    state.subdomain = body().subdomain;
+    return { body: ok({ subdomain: state.subdomain }) };
+  }
+  if (r === "/workers/scripts" && m === "GET") return { body: ok([...(state.others || []), ...(state.script ? ["team-hub"] : [])].map((id) => ({ id }))) };
   if (needEmail && r.startsWith("/d1")) { needEmail = false; return bad(10034, "workers.api.error.email_verification_required", 403); }
   if (r === "/d1/database" && m === "GET") return { body: ok(state.d1.filter((d) => d.name === u.searchParams.get("name"))) };
   if (r === "/d1/database" && m === "POST") { const d = { uuid: "db-aaaaaaaa", name: body().name }; state.d1.push(d); return { body: ok(d) }; }

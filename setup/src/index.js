@@ -6,6 +6,7 @@ import BUNDLE from "./app-bundle.js";
 const WORKER = "team-hub", DB_NAME = "team-hub-db", KV_TITLE = "team-hub-files";
 const ID = /^[A-Za-z0-9-]{8,64}$/;
 const SUB = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+const SITE_NAME = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/; // Cloudflareの上限は32文字
 
 class CfError extends Error {
   constructor(code, message) { super(message); this.code = code; }
@@ -14,6 +15,8 @@ class CfError extends Error {
 // Cloudflareの返事を、PCが苦手な人にも分かる言葉にする
 function friendly(e) {
   const m = String(e.message || "");
+  if (e.code === "name")
+    return { kind: "name", message: "この名前は使えませんでした。ほかの人が使っている名前かもしれません。別の名前にしてください。" };
   if (m.includes("email_verification_required") || /verify your email/i.test(m))
     return { kind: "email", message: "Cloudflareのメールアドレス確認が済んでいません。Cloudflareから届いたメールを開き、確認のボタンを押してから、もう一度「作る」を押してください。" };
   if (e.code === 1000 || e.code === 6003 || e.code === 9106 || e.code === 9109 || e.code === 10000 || e.code === 10001 || /authenticat|unauthorized/i.test(m))
@@ -34,6 +37,17 @@ async function cf(env, token, path, init = {}) {
 }
 const json = (body) => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
+async function currentSubdomain(env, t, accountId) {
+  try {
+    return (await cf(env, t, `/accounts/${accountId}/workers/subdomain`)).subdomain;
+  } catch (e) {
+    if (e.code === 10007) return null; // まだ住所がない
+    throw e;
+  }
+}
+const putSubdomain = (env, t, accountId, subdomain) =>
+  cf(env, t, `/accounts/${accountId}/workers/subdomain`, { ...json({ subdomain }), method: "PUT" });
+
 const STEPS = {
   // 鍵が使えるか確かめて、アカウントを調べる
   async check(env, t) {
@@ -43,18 +57,30 @@ const STEPS = {
     return { accounts: accounts.map((a) => ({ id: a.id, name: a.name })) };
   },
 
-  // サイトの住所（workers.dev）。新しいアカウントにはまだないので、自動で作る
-  async address(env, t, { accountId }) {
-    try {
-      const r = await cf(env, t, `/accounts/${accountId}/workers/subdomain`);
-      return { subdomain: r.subdomain };
-    } catch (e) {
-      if (e.code !== 10007) throw e;
+  // 住所の名前を選べるか調べる。名前はアカウントで共通なので、ほかのサイトがあるときは選ばせない
+  async place(env, t, { accountId }) {
+    const scripts = await cf(env, t, `/accounts/${accountId}/workers/scripts`);
+    return { canName: !scripts?.length };
+  },
+
+  // サイトの住所（workers.dev）。名前の指定があればそれにする。なければ今の住所を使い、住所がなければ自動で作る
+  async address(env, t, { accountId, siteName }) {
+    const current = await currentSubdomain(env, t, accountId);
+    if (siteName && siteName !== current) {
+      try {
+        return { subdomain: (await putSubdomain(env, t, accountId, siteName)).subdomain };
+      } catch (e) {
+        if (friendly(e).kind !== "other") throw e;
+        // 取られている名前は選び直してもらう。今の住所を変えられないだけなら、そのまま作って完成の画面で案内する
+        if (!current || e.code === 10031 || /taken|already|unavailable/i.test(e.message)) throw new CfError("name", e.message);
+        return { subdomain: current, nameKept: true };
+      }
     }
+    if (current) return { subdomain: current };
     for (let i = 0; i < 5; i++) {
       const name = "team-" + crypto.randomUUID().replaceAll("-", "").slice(0, 8);
       try {
-        const r = await cf(env, t, `/accounts/${accountId}/workers/subdomain`, { ...json({ subdomain: name }), method: "PUT" });
+        const r = await putSubdomain(env, t, accountId, name);
         return { subdomain: r.subdomain };
       } catch (e) {
         if (e.code !== 10031) throw e; // 10031 = その名前はもう使われている
@@ -151,6 +177,7 @@ function validate(body) {
   for (const k of ["accountId", "databaseId", "kvId"])
     if (body[k] != null && !ID.test(body[k])) return false;
   if (body.subdomain != null && !SUB.test(body.subdomain)) return false;
+  if (body.siteName != null && !SITE_NAME.test(body.siteName)) return false;
   return true;
 }
 
