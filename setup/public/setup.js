@@ -297,11 +297,27 @@ async function run() {
   for (let i = 0; i < 40; i++) {
     const r = await step("live");
     if (r.url) s.url = r.url;
-    if (r.ok && r.live) return finish();
+    if (r.ok && r.live && await opens()) return finish();
     await new Promise((ok) => setTimeout(ok, 3000));
   }
   // サイトはできているが、まだ開けない。住所が使えるまで時間がかかることがある
   finish(true);
+}
+
+// この画面のブラウザから本当につながるか。名前を変えた直後は、暗号化の準備が済むまでつながらないことがある
+const opens = () => fetch(s.url + "/api/auth/state", { mode: "no-cors", cache: "no-store" }).then(() => true, () => false);
+
+// 待っている間も確かめ続けて、開けるようになったら知らせる
+async function watchOpen() {
+  const url = s.url;
+  while (s.url === url && document.getElementById("slow")) {
+    if (await opens()) {
+      const note = document.getElementById("slow");
+      if (note) note.textContent = "開けるようになりました。下の「ツールを開く」を押してください。";
+      return;
+    }
+    await new Promise((ok) => setTimeout(ok, 15000));
+  }
 }
 
 function fail(r, btn, msg) {
@@ -317,7 +333,7 @@ function finish(slow) {
   s.token = "";
   page(0, `<h1>🎉 ${s.updating ? "新しい版にしました" : "できました！"}</h1>
     ${s.updating ? `<p>これまでのデータは、そのまま残っています。</p>` : ""}
-    ${slow ? `<div class="note">サイトが開けるようになるまで、少し時間がかかることがあります。開けないときは、10分ほど待ってからもう一度開いてください。</div>` : ""}
+    ${slow ? `<div class="note" id="slow">サイトは作れましたが、開けるようになるまで、まだ少しかかります。「安全に接続できません」と出ても、壊れてはいません。この画面を開いたまま待つと、開けるようになったらここでお知らせします。</div>` : ""}
     <p>これが、あなたのツールの住所です。</p>
     <span class="url" id="url">${esc(s.url)}</span>
     ${s.work.nameKept ? `<div class="note">決めていただいた名前にはしていません。名前を変えるときは、Cloudflareの「Workers &amp; Pages」で「Your subdomain」の横の「Change」を押します。メンバーを招待する前に変えてください。${s.work.nameCode ? `<br><span class="small">（番号：${esc(s.work.nameCode)}）</span>` : ""}</div>` : ""}
@@ -329,6 +345,7 @@ function finish(slow) {
     <details><summary>念のため、鍵を消す（おすすめ）</summary>
       <p class="small">もう鍵は使いません。下のボタンでCloudflareの画面を開き、<b>team-hub-setup</b> の行の「…」から「Delete（削除）」を押すと消えます。消してもツールはそのまま使えます。新しい版にするときは、また作れば大丈夫です。</p>
       <a class="btn sub" href="${TOKENS_PAGE}" target="_blank" rel="noopener">鍵の一覧を開く</a></details>`);
+  if (slow) watchOpen();
   on("copy", async (e) => {
     try { await navigator.clipboard.writeText(s.url); e.target.textContent = "✓ コピーしました"; }
     catch { e.target.textContent = "コピーできませんでした。上の住所をメモしてください"; }
