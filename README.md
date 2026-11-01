@@ -57,7 +57,9 @@ https://team-hub-setup.makikomublog.workers.dev
 Cloudflareの管理画面（https://dash.cloudflare.com）の「Workers & Pages」で、「Your subdomain」の横の「Change」を押します。古い住所は使えなくなるので、メンバーには新しい住所を伝え直してください。同じアカウントにほかのサイトがあると、その住所も変わります。
 
 **Q. 要らなくなった。消すには？**
-Cloudflareの管理画面（https://dash.cloudflare.com）で、次の3つを削除します。**議事録やタスクなどのデータもすべて消え、元に戻せません。** 必要なものは先に控えてください。
+設置ページ（https://team-hub-setup.makikomublog.workers.dev）の「作ったツールを消す」を押して、案内どおりに進めます。**議事録やタスクなどのデータもすべて消え、元に戻せません。** 必要なものは先に控えてください。
+
+Cloudflareの管理画面（https://dash.cloudflare.com）から、次の3つを手で削除することもできます。
 
 - サイト（Workers）：`team-hub`
 - データベース（D1）：`team-hub-db`

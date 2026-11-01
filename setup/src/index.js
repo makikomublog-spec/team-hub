@@ -16,7 +16,7 @@ class CfError extends Error {
 function friendly(e) {
   const m = String(e.message || "");
   if (e.code === "name")
-    return { kind: "name", message: "この名前は使えませんでした。ほかの人が使っている名前かもしれません。別の名前にしてください。" };
+    return { kind: "name", message: "この名前は、世界中のどなたかがすでに使っています。別の名前にしてください。チーム名に数字を足すと、空いていることが多いです。" };
   if (m.includes("email_verification_required") || /verify your email/i.test(m))
     return { kind: "email", message: "Cloudflareのメールアドレス確認が済んでいません。Cloudflareから届いたメールを開き、確認のボタンを押してから、もう一度「作る」を押してください。" };
   if (e.code === 1000 || e.code === 6003 || e.code === 9106 || e.code === 9109 || e.code === 10000 || e.code === 10001 || /authenticat|unauthorized/i.test(m))
@@ -36,6 +36,20 @@ async function cf(env, token, path, init = {}) {
   return data.result;
 }
 const json = (body) => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+// このツールが作ったものだけを、決まった名前で探す
+async function findMine(env, t, accountId) {
+  const [scripts, databases, namespaces] = [
+    await cf(env, t, `/accounts/${accountId}/workers/scripts`),
+    await cf(env, t, `/accounts/${accountId}/d1/database?name=${DB_NAME}`),
+    await cf(env, t, `/accounts/${accountId}/storage/kv/namespaces?per_page=100`),
+  ];
+  return {
+    site: (scripts || []).some((s) => s.id === WORKER),
+    database: (databases || []).find((d) => d.name === DB_NAME),
+    files: (namespaces || []).find((n) => n.title === KV_TITLE),
+  };
+}
 
 async function currentSubdomain(env, t, accountId) {
   try {
@@ -66,22 +80,24 @@ const STEPS = {
   // サイトの住所（workers.dev）。名前の指定があればそれにする。なければ今の住所を使い、住所がなければ自動で作る
   async address(env, t, { accountId, siteName }) {
     const current = await currentSubdomain(env, t, accountId);
+    let nameKept, nameCode; // 名前どおりにならなかったときだけ返す
     if (siteName && siteName !== current) {
       try {
         return { subdomain: (await putSubdomain(env, t, accountId, siteName)).subdomain };
       } catch (e) {
         if (friendly(e).kind !== "other") throw e;
-        // 取られている名前は選び直してもらう。今の住所を変えられないだけなら、そのまま作って完成の画面で案内する
-        if (!current || e.code === 10031 || /taken|already|unavailable/i.test(e.message)) throw new CfError("name", e.message);
-        return { subdomain: current, nameKept: true };
+        // 10031 = 取られている名前なので選び直してもらう。それ以外で止めない。住所は作ってから完成の画面で案内する
+        if (e.code === 10031) throw new CfError("name", e.message);
+        nameKept = true;
+        nameCode = e.code;
       }
     }
-    if (current) return { subdomain: current };
+    if (current) return { subdomain: current, nameKept, nameCode };
     for (let i = 0; i < 5; i++) {
       const name = "team-" + crypto.randomUUID().replaceAll("-", "").slice(0, 8);
       try {
         const r = await putSubdomain(env, t, accountId, name);
-        return { subdomain: r.subdomain };
+        return { subdomain: r.subdomain, nameKept, nameCode };
       } catch (e) {
         if (e.code !== 10031) throw e; // 10031 = その名前はもう使われている
       }
@@ -158,6 +174,21 @@ const STEPS = {
     form.append(BUNDLE.mainModule, new File([BUNDLE.script], BUNDLE.mainModule, { type: "application/javascript+module" }));
     await cf(env, t, `/accounts/${accountId}/workers/scripts/${WORKER}`, { method: "PUT", body: form });
     await cf(env, t, `/accounts/${accountId}/workers/scripts/${WORKER}/subdomain`, json({ enabled: true, previews_enabled: false }));
+    return {};
+  },
+
+  // 消す前に、何が残っているかを見せる
+  async found(env, t, { accountId }) {
+    const m = await findMine(env, t, accountId);
+    return { site: m.site, database: !!m.database, files: !!m.files };
+  },
+
+  // サイト → データ → ファイルの順に消す。IDは受け取らず、ここで探した決まった名前のものだけを消す
+  async remove(env, t, { accountId }) {
+    const m = await findMine(env, t, accountId);
+    if (m.site) await cf(env, t, `/accounts/${accountId}/workers/scripts/${WORKER}`, { method: "DELETE" });
+    if (m.database) await cf(env, t, `/accounts/${accountId}/d1/database/${m.database.uuid}`, { method: "DELETE" });
+    if (m.files) await cf(env, t, `/accounts/${accountId}/storage/kv/namespaces/${m.files.id}`, { method: "DELETE" });
     return {};
   },
 

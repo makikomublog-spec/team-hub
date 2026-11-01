@@ -21,7 +21,7 @@ const TASKS = [
   ["site", "サイトを組み立てています"],
 ];
 
-const s = { token: "", accountId: null, accounts: [], work: {}, doneTo: 0, url: "", updating: false };
+const s = { token: "", accountId: null, accounts: [], work: {}, doneTo: 0, url: "", updating: false, removing: false };
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const isMac = /Mac/.test(navigator.platform);
@@ -47,15 +47,18 @@ function page(n, html) {
 const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
 
 function welcome() {
-  page(0, `<h1>チーム管理ツールを、あなた専用に作ります</h1>
+  s.removing = false;
+  page(0,`<h1>チーム管理ツールを、あなた専用に作ります</h1>
     <p>タスク・カレンダー・議事録をまとめるツールです。会議を録音すると、自動で文字にできます。</p>
     <p>このページの案内どおりに、3つのことをするだけです。パソコンに何かを入れることはありません。</p>
     <div class="note"><b>はじめる前に</b><br>
       ・パソコンのGoogle Chromeで開いてください（スマホではできません）<br>
       ・作るのはチームで1人だけです。ほかの方は、あとで招待リンクから入れます<br>
       ・費用はかかりません。クレジットカードの入力を求められたら、入力せずに止めて、教えてくれた人に聞いてください</div>
-    <button class="btn" id="go">はじめる</button>`);
+    <button class="btn" id="go">はじめる</button>
+    <button class="back" id="remove">作ったツールを消す</button>`);
   on("go", signup);
+  on("remove", () => { s.removing = true; key(); });
 }
 
 function signup() {
@@ -75,8 +78,8 @@ function signup() {
 }
 
 function key(message) {
-  page(2, `<h1>「鍵」を作って、ここに貼り付けます</h1>
-    <p>このページがあなたの代わりにツールを作るための、合鍵のようなものです。</p>
+  page(s.removing ? 0 : 2, `<h1>「鍵」を作って、ここに貼り付けます</h1>
+    <p>このページがあなたの代わりにツールを${s.removing ? "消す" : "作る"}ための、合鍵のようなものです。</p>
     ${typeof message === "string" ? `<div class="err">${esc(message)}</div>` : ""}
     <ol class="do">
       <li>下の緑のボタンを押します。Cloudflareの画面が別のタブで開きます。<br>
@@ -93,14 +96,14 @@ function key(message) {
     <div id="keyMsg"></div>
     <button class="btn" id="check">この鍵で進む</button>
     <details><summary>鍵は安全ですか？</summary>
-      <p class="small">鍵は、ツールを作る間だけ使います。保存はしません。この鍵でできるのはツールを置くことだけで、お金の支払いやパスワードの変更はできません。完成の画面で、消し方もご案内します。</p></details>
+      <p class="small">鍵は、${s.removing ? "ツールを消す" : "ツールを作る"}間だけ使います。保存はしません。この鍵でできるのはツールを置くことと消すことだけで、お金の支払いやパスワードの変更はできません。最後の画面で、鍵の消し方もご案内します。</p></details>
     <button class="back" id="back">ひとつ前に戻る</button>`);
   const box = document.getElementById("token"), msg = document.getElementById("keyMsg");
   on("paste", async () => {
     try { box.value = await navigator.clipboard.readText(); check(); }
     catch { msg.innerHTML = `<div class="note">自動で貼り付けできませんでした。白い四角の中を押して、${isMac ? "「command」と「V」" : "「Ctrl」と「V」"}を同時に押してください。</div>`; box.focus(); }
   });
-  on("back", signup);
+  on("back", s.removing ? welcome : signup);
   on("check", check);
   async function check() {
     const btn = document.getElementById("check");
@@ -111,18 +114,76 @@ function key(message) {
     btn.disabled = false; btn.textContent = "この鍵で進む";
     if (!r.ok) { msg.innerHTML = `<div class="err">${esc(r.message)}</div>`; return; }
     s.accounts = r.accounts;
-    if (r.accounts.length === 1) { s.accountId = r.accounts[0].id; place(); }
+    if (r.accounts.length === 1) { s.accountId = r.accounts[0].id; afterAccount(); }
     else chooseAccount();
   }
 }
 
+const afterAccount = () => (s.removing ? removeCheck() : place());
+
 function chooseAccount() {
-  page(2, `<h1>どのアカウントに作りますか？</h1>
-    <p>アカウントが複数あります。迷ったら、いちばん上のままで大丈夫です。</p>
+  page(s.removing ? 0 : 2, `<h1>どのアカウント${s.removing ? "から消し" : "に作り"}ますか？</h1>
+    <p>アカウントが複数あります。${s.removing ? "ツールを作ったアカウントを選んでください。" : "迷ったら、いちばん上のままで大丈夫です。"}</p>
     ${s.accounts.map((a, i) => `<label class="acct"><input type="radio" name="acct" value="${esc(a.id)}" ${i === 0 ? "checked" : ""}> ${esc(a.name)}</label>`).join("")}
-    <button class="btn" id="next">このアカウントに作る</button>`);
-  on("next", () => { s.accountId = document.querySelector("input[name=acct]:checked").value; place(); });
+    <button class="btn" id="next">${s.removing ? "このアカウントを調べる" : "このアカウントに作る"}</button>`);
+  on("next", () => { s.accountId = document.querySelector("input[name=acct]:checked").value; afterAccount(); });
 }
+
+// 消す手順。何が残っているかを見せて、元に戻せないことを確かめてから消す
+async function removeCheck() {
+  page(0, `<h1>確かめています…</h1>`);
+  const r = await step("found");
+  if (!r.ok) return removeFailed(r, removeCheck);
+  if (!r.site && !r.database && !r.files) {
+    page(0, `<h1>消すものはありませんでした</h1>
+      <p>このアカウントには、このツールで作ったものは残っていません。</p>
+      ${keyRemoval()}`);
+    return;
+  }
+  const name = s.accounts.find((a) => a.id === s.accountId)?.name || "";
+  page(0, `<h1>ツールを消します</h1>
+    <p>アカウント：<b>${esc(name)}</b></p>
+    <p>次のものが見つかりました。</p>
+    <ul>
+      ${r.site ? `<li>サイト</li>` : ""}
+      ${r.database ? `<li>データ（タスク・議事録など）</li>` : ""}
+      ${r.files ? `<li>ファイル（資料など）</li>` : ""}
+    </ul>
+    <div class="note"><b>消すと、元に戻せません。</b>必要なものは先に控えてください。<br>このアカウントにあるほかのサイトは消しません。</div>
+    <label class="acct"><input type="checkbox" id="agree"> 元に戻せないことを確認しました</label>
+    <div id="removeMsg"></div>
+    <button class="btn danger" id="run" disabled>消す</button>
+    <button class="back" id="back">やめる</button>`);
+  document.getElementById("agree").onchange = (e) => { document.getElementById("run").disabled = !e.target.checked; };
+  on("back", welcome);
+  on("run", removeRun);
+}
+
+async function removeRun() {
+  const btn = document.getElementById("run");
+  btn.disabled = true; btn.textContent = "消しています…"; document.getElementById("removeMsg").innerHTML = "";
+  const r = await step("remove");
+  if (!r.ok) {
+    if (r.kind === "key") { s.token = ""; return key(r.message); }
+    document.getElementById("removeMsg").innerHTML = `<div class="err">${esc(r.message)}</div>`;
+    btn.disabled = false; btn.textContent = "もう一度押す";
+    return;
+  }
+  s.token = "";
+  page(0, `<h1>消しました</h1>
+    <p>サイト・データ・ファイルを消しました。もう一度作るときは、このページをはじめから進めてください。</p>
+    <p class="small">住所の名前は、アカウントに残ります。</p>
+    ${keyRemoval()}`);
+}
+
+function removeFailed(r, again) {
+  if (r.kind === "key") { s.token = ""; return key(r.message); }
+  page(0, `<h1>うまくいきませんでした</h1><div class="err">${esc(r.message)}</div><button class="btn" id="again">もう一度押す</button>`);
+  on("again", again);
+}
+
+const keyRemoval = () => `<p class="small">もう鍵は使いません。下のボタンでCloudflareの画面を開き、<b>team-hub-setup</b> の行の「…」から「Delete（削除）」を押すと消えます。</p>
+  <a class="btn sub" href="${TOKENS_PAGE}" target="_blank" rel="noopener">鍵の一覧を開く</a>`;
 
 // 住所の名前を選べるアカウントなら名前の画面へ。途中まで作ってあるときは、住所はもう決まっている
 async function place() {
@@ -150,7 +211,9 @@ function nameForm(message) {
     <p>できあがる住所</p>
     <span class="url" id="preview"></span>
     <div id="nameMsg"></div>
-    <button class="btn" id="next">この名前で進む</button>`);
+    <button class="btn" id="next">この名前で進む</button>
+    ${message ? `<button class="btn sub" id="skip">名前を決めずに作る（あとで変えられます）</button>` : ""}`);
+  on("skip", () => { s.siteName = undefined; s.work.nameKept = true; build(); });
   const box = document.getElementById("siteName"), preview = document.getElementById("preview");
   const value = () => box.value.normalize("NFKC").trim().toLowerCase();
   const show = () => { preview.textContent = `https://team-hub.${value() || "…"}.workers.dev`; };
@@ -226,7 +289,7 @@ function finish(slow) {
     ${slow ? `<div class="note">サイトが開けるようになるまで、少し時間がかかることがあります。開けないときは、10分ほど待ってからもう一度開いてください。</div>` : ""}
     <p>これが、あなたのツールの住所です。</p>
     <span class="url" id="url">${esc(s.url)}</span>
-    ${s.work.nameKept ? `<div class="note">決めていただいた名前には変えられなかったので、今の住所のまま作りました。名前を変えるときは、Cloudflareの「Workers &amp; Pages」で「Your subdomain」の横の「Change」を押します。メンバーを招待する前に変えてください。</div>` : ""}
+    ${s.work.nameKept ? `<div class="note">決めていただいた名前にはしていません。名前を変えるときは、Cloudflareの「Workers &amp; Pages」で「Your subdomain」の横の「Change」を押します。メンバーを招待する前に変えてください。${s.work.nameCode ? `<br><span class="small">（番号：${esc(s.work.nameCode)}）</span>` : ""}</div>` : ""}
     <a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener">ツールを開く</a>
     <button class="btn sub" id="copy">住所をコピーする</button>
     ${s.updating ? "" : `<div class="note"><b>開いたら、すぐにしてください</b><br>

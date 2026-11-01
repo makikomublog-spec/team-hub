@@ -31,7 +31,7 @@ async function route(req, raw) {
   const auth = req.headers.authorization || "";
   state.log.push({ m, p });
 
-  // 確認の場面を切り替える（subdomain / others / taken / refuseChange）
+  // 確認の場面を切り替える（subdomain / others / taken / refuseChange / refuseName）
   if (p === "/__mock") { Object.assign(state, body()); return { body: { ok: true } }; }
   if (p === "/api/auth/state") return { body: { ok: true } };
   if (p.endsWith("/workers/assets/upload")) {
@@ -53,6 +53,7 @@ async function route(req, raw) {
   if (r === "/workers/subdomain" && m === "PUT") {
     if (state.taken === body().subdomain) return bad(10031, "subdomain already taken", 409);
     if (state.refuseChange && state.subdomain) return bad(10032, "pretend refusal", 400);
+    if (state.refuseName === body().subdomain) return bad(10033, "already pretend refusal", 400);
     state.subdomain = body().subdomain;
     return { body: ok({ subdomain: state.subdomain }) };
   }
@@ -76,6 +77,9 @@ async function route(req, raw) {
     // 本物と同じく、全部あれば buckets は空で jwt がそのまま完了の印になる
     return missing.length ? { body: ok({ jwt: "upload-jwt", buckets: [missing.slice(0, 4), missing.slice(4)].filter((b) => b.length) }) } : { body: ok({ jwt: "completion-jwt", buckets: [] }) };
   }
+  if (/^\/workers\/scripts\/[^/]+$/.test(r) && m === "DELETE") { state.script = null; return { body: ok({}) }; }
+  if (/^\/d1\/database\/[^/]+$/.test(r) && m === "DELETE") { state.d1 = state.d1.filter((d) => !r.endsWith(d.uuid)); return { body: ok({}) }; }
+  if (/^\/storage\/kv\/namespaces\/[^/]+$/.test(r) && m === "DELETE") { state.kv = state.kv.filter((n) => !r.endsWith(n.id)); return { body: ok({}) }; }
   if (/^\/workers\/scripts\/[^/]+$/.test(r) && m === "PUT") {
     const f = await parts(req, raw);
     state.metadata = JSON.parse(f.metadata.text);
