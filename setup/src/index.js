@@ -9,7 +9,7 @@ const SUB = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 const SITE_NAME = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/; // Cloudflareの上限は32文字
 
 class CfError extends Error {
-  constructor(code, message) { super(message); this.code = code; }
+  constructor(code, message, current) { super(message); this.code = code; this.current = current; }
 }
 
 // Cloudflareの返事を、PCが苦手な人にも分かる言葉にする
@@ -17,6 +17,8 @@ function friendly(e) {
   const m = String(e.message || "");
   if (e.code === "name")
     return { kind: "name", message: "この名前は、世界中のどなたかがすでに使っています。別の名前にしてください。チーム名に数字を足すと、空いていることが多いです。" };
+  if (e.code === "change")
+    return { kind: "change", message: "このページからは、住所の名前を変えられませんでした。", current: e.current };
   if (m.includes("email_verification_required") || /verify your email/i.test(m))
     return { kind: "email", message: "Cloudflareのメールアドレス確認が済んでいません。Cloudflareから届いたメールを開き、確認のボタンを押してから、もう一度「作る」を押してください。" };
   if (e.code === 1000 || e.code === 6003 || e.code === 9106 || e.code === 9109 || e.code === 10000 || e.code === 10001 || /authenticat|unauthorized/i.test(m))
@@ -74,7 +76,7 @@ const STEPS = {
   // 住所の名前を選べるか調べる。名前はアカウントで共通なので、ほかのサイトがあるときは選ばせない
   async place(env, t, { accountId }) {
     const scripts = await cf(env, t, `/accounts/${accountId}/workers/scripts`);
-    return { canName: !scripts?.length };
+    return { canName: !scripts?.length, current: await currentSubdomain(env, t, accountId) };
   },
 
   // サイトの住所（workers.dev）。名前の指定があればそれにする。なければ今の住所を使い、住所がなければ自動で作る
@@ -82,15 +84,20 @@ const STEPS = {
     const current = await currentSubdomain(env, t, accountId);
     let nameKept, nameCode; // 名前どおりにならなかったときだけ返す
     if (siteName && siteName !== current) {
+      let made;
       try {
-        return { subdomain: (await putSubdomain(env, t, accountId, siteName)).subdomain };
+        made = (await putSubdomain(env, t, accountId, siteName)).subdomain;
       } catch (e) {
         if (friendly(e).kind !== "other") throw e;
-        // 10031 = 取られている名前なので選び直してもらう。それ以外で止めない。住所は作ってから完成の画面で案内する
+        // 10031 = 取られている名前なので選び直してもらう
         if (e.code === 10031) throw new CfError("name", e.message);
+        // すでにある住所を断られたら、何も作らないうちに管理画面で変えてもらう
+        if (current) { const err = new CfError("change", e.message, current); err.number = e.code; throw err; }
         nameKept = true;
         nameCode = e.code;
       }
+      if (made === siteName) return { subdomain: made };
+      if (made) throw new CfError("change", "subdomain unchanged", current || made);
     }
     if (current) return { subdomain: current, nameKept, nameCode };
     for (let i = 0; i < 5; i++) {
@@ -231,7 +238,7 @@ export default {
     try {
       return reply({ ok: true, ...(await step(env, token, body)) });
     } catch (e) {
-      return reply({ ok: false, ...friendly(e), code: e.code ?? null });
+      return reply({ ok: false, ...friendly(e), code: e.number ?? e.code ?? null });
     }
   },
 };

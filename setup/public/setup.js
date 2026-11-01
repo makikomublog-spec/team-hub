@@ -195,8 +195,37 @@ async function place() {
     page(3, `<h1>うまくいきませんでした</h1><div class="err">${esc(r.message)}</div><button class="btn" id="again">もう一度押す</button>`);
     return on("again", place);
   }
+  s.current = r.current;
   if (r.canName) nameForm();
   else build();
+}
+
+// すでにある住所はこのページから変えられないことがあるので、Cloudflareの画面で変えてもらう
+function changeForm(r, message) {
+  s.current = r.current;
+  page(3, `<h1>住所の名前は、Cloudflareの画面で変えます</h1>
+    <p>${esc(r.message)}まだ何も作っていません。</p>
+    <p>いまの住所</p>
+    <span class="url">https://team-hub.${esc(s.current)}.workers.dev</span>
+    ${message ? `<div class="note">${esc(message)}</div>` : ""}
+    <ol class="do">
+      <li>下の緑のボタンを押します。Cloudflareの画面が別のタブで開きます。
+        <a class="btn" href="https://dash.cloudflare.com/${esc(s.accountId)}/workers/subdomain" target="_blank" rel="noopener">名前を変える画面を開く</a></li>
+      <li>名前に <b class="label">${esc(s.siteName)}</b> と入れて、保存します。「Change」というボタンのときは、それを押してから入れます。</li>
+      <li>このタブに戻って、下の「変えました」を押します。</li>
+    </ol>
+    <button class="btn" id="changed">変えました</button>
+    <button class="btn sub" id="keep">今の住所のまま作る（あとで変えられます）</button>
+    ${r.code ? `<p class="small">（番号：${esc(r.code)}）</p>` : ""}`);
+  on("changed", async (e) => {
+    e.target.disabled = true; e.target.textContent = "確かめています…";
+    const c = await step("place");
+    if (!c.ok) return c.kind === "key" ? (s.token = "", key(c.message)) : changeForm(r, c.message);
+    if (c.current === r.current) return changeForm(r, "まだ前の住所のままのようです。保存できたか確かめて、もう一度押してください。");
+    s.current = c.current; s.siteName = undefined;
+    build();
+  });
+  on("keep", () => { s.siteName = undefined; s.work.nameKept = true; build(); });
 }
 
 function nameForm(message) {
@@ -232,6 +261,7 @@ function nameForm(message) {
 function build() {
   page(3, `<h1>ツールを作ります</h1>
     <p>ボタンを押すと、自動で進みます。終わるまでこの画面を閉じないでください。</p>
+    ${!s.siteName && s.current ? `<p>できあがる住所</p><span class="url">https://team-hub.${esc(s.current)}.workers.dev</span>` : ""}
     <ul class="tasks" id="tasks">${TASKS.map(([k, label]) => `<li data-k="${k}">${label}</li>`).join("")}<li data-k="live">開けるようになるのを待っています</li></ul>
     <div id="buildMsg"></div>
     <button class="btn" id="run">作る</button>
@@ -277,6 +307,7 @@ async function run() {
 function fail(r, btn, msg) {
   if (r.kind === "key") { s.token = ""; return key(r.message); }
   if (r.kind === "name") return nameForm(r.message);
+  if (r.kind === "change") return changeForm(r);
   msg.innerHTML = `<div class="err">${esc(r.message)}${r.code ? `<br><span class="small">（番号：${esc(r.code)}）</span>` : ""}</div>`;
   btn.disabled = false; btn.textContent = "もう一度押す";
   paint();
