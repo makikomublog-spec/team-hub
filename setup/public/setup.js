@@ -368,7 +368,7 @@ function finish(slow) {
     <a class="btn" href="${esc(s.url)}${s.claim ? `/#/claim/${esc(s.claim)}` : ""}" target="_blank" rel="noopener">${s.claim ? "ツールを開いて管理者になる" : "ツールを開く"}</a>
     <button class="btn sub" id="copy">URLをコピーする</button>
     ${s.updating ? "" : `<div class="note"><b>開いたら、すぐにしてください</b><br>
-      ・「はじめての設定」を済ませます。<b>この緑のボタンから開いた人だけが管理者になれます</b>。メンバーに知らせるのは、あとで出す招待リンクです<br>
+      ・「はじめての設定」を済ませます。<b>この緑のボタンから開いた人だけが管理者になれます</b>。メンバーにURLを知らせるのは、設定が終わってからです<br>
       ・ブックマークします（${isMac ? "「command」と「D」" : "「Ctrl」と「D」"}を同時に押します）</div>`}
     <details><summary>ドメインをあとから変えたいとき</summary>
       <p class="small">下のボタンの画面で「Change」を押して、新しい名前を入れます。作り直す必要はありません。前のURLは使えなくなるので、メンバーには新しいURLを伝え直してください。Googleログインを設定したあとに変えた場合は、Googleの設定にも新しいURLを足してください（ツールのログイン画面に手順があります）。変更の直後は「安全に接続できません」と出ることがありますが、しばらく待つと開けます。</p>

@@ -424,3 +424,8 @@ select.pri-中 { border-color: #c9a227; color: #9a7a10; }
 .gbody ul { padding-left: 20px; }
 .gnav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .authbox a.btn { display: inline-block; text-decoration: none; }
+
+/* 参加の依頼 */
+.joinbox { margin-bottom: 16px; }
+.joinbox h2 { margin-top: 0; }
+.joinbox th:first-child, .joinbox td:first-child, .joinbox td:last-child { white-space: nowrap; }

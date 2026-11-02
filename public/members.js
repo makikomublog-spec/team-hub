@@ -59,13 +59,29 @@ function table(members) {
 }
 
 
+// メンバーに知らせるURLと、届いている参加の依頼(Googleログインのツールの記録係だけ)
+function requestsHtml(requests, members) {
+  const free = members.filter((m) => !m.has_account);
+  return `<div class="card joinbox"><h2>メンバーを増やす</h2>
+    <p class="small">次のURLをメンバーに送ってください。本人が開いてGoogleのボタンを押すと、ここに依頼が届きます。許可するまで、中は見られません。</p>
+    <div class="row"><input class="wide" readonly value="${esc(location.origin)}"><button class="btn" data-copyurl="1">URLをコピー</button></div>
+    <h3>参加の依頼（${requests.length}件）</h3>
+    ${requests.length ? `<table><tr><th>名前</th><th>Googleアカウント</th><th>名簿のどの人か</th><th></th></tr>${requests.map((r) => `<tr>
+      <td>${esc(r.name || "")}</td><td>${esc(r.email || "")}</td>
+      <td><select data-request-member="${esc(r.sub)}"><option value="">新しいメンバーとして追加</option>${free.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join("")}</select></td>
+      <td><button class="btn" data-approve="${esc(r.sub)}">許可</button> <button class="btn sub" data-reject="${esc(r.sub)}">断る</button></td></tr>`).join("")}</table>`
+      : `<p class="muted small">いまは届いていません。依頼が来たら、ここに出ます。</p>`}</div>`;
+}
+
 export async function mountMembers(box, me) {
   const members = await api("/api/members");
+  const requests = me.isRecorder && me.googleClientId ? await api("/api/access-requests") : null;
   const add = me.isRecorder ? (st.adding
     ? `<div class="card addmember"><div class="row"><input id="newName" placeholder="呼び名（例：たき）"><input id="newDisplay" class="wide" placeholder="名前（表示名・あとで編集できます）">
         <button class="btn" id="addMember">追加</button><button class="btn sub" id="cancelAdd">やめる</button></div></div>`
     : `<button class="btn" id="openAdd">＋ メンバーを追加</button>`) : "";
   box.innerHTML = `
+    ${requests ? requestsHtml(requests, members) : ""}
     <div class="row mbar"><b>${members.length}人</b>
       <button class="btn sub" id="toggleView">${st.view === "card" ? "表で見る" : "カードで見る"}</button>
       <span class="grow"></span>${add}</div>
@@ -73,11 +89,25 @@ export async function mountMembers(box, me) {
       <nav class="mside"><div class="label">メンバー（押すとカードへ）</div>
         ${members.map((m) => `<button class="mjump" data-jump="${m.id}">${esc(m.name)}${m.id === me.memberId ? `<span class="muted small">（自分）</span>` : ""}</button>`).join("")}</nav>
       <div class="mcards">${members.map((m) => card(m, me)).join("")}</div></div>` : table(members)}
-    ${me.isRecorder ? `<p class="muted small">新しい人は「＋ メンバーを追加」→ カードの「✉️ 招待リンク」でリンクを作り、本人に送ります。${me.googleClientId ? "本人がリンクを開いてGoogleのボタンを押すと使えるようになります。<br>\n      ログインできなくなった人には「🔑 再設定リンク」を送ってください。" : "本人がリンクを開いてログインIDとパスワードを決めると使えるようになります。<br>\n      パスワードを忘れた人には「🔑 再設定リンク」を送ってください。"}</p>` : ""}`;
+    ${me.isRecorder ? `<p class="muted small">${me.googleClientId ? "Googleアカウントを変えた人には「🔑 再設定リンク」を送ってください。" : "新しい人は「＋ メンバーを追加」→ カードの「✉️ 招待リンク」でリンクを作り、本人に送ります。本人がリンクを開いてログインIDとパスワードを決めると使えるようになります。<br>\n      パスワードを忘れた人には「🔑 再設定リンク」を送ってください。"}</p>` : ""}`;
 
   box.onclick = async (e) => {
     const t = e.target, d = t.dataset;
     try {
+      if (d.copyurl) {
+        await navigator.clipboard.writeText(location.origin);
+        t.textContent = "✅ コピーしました"; return;
+      }
+      if (d.approve) {
+        const member_id = box.querySelector(`select[data-request-member="${CSS.escape(d.approve)}"]`).value;
+        await api("/api/access-requests/approve", { method: "POST", body: JSON.stringify({ sub: d.approve, member_id }) });
+        return mountMembers(box, me);
+      }
+      if (d.reject) {
+        if (!confirm("この依頼を断りますか？\n\n断った人は、Googleのボタンを押しても入れません。あとから入れるときは、招待リンクを送ってください。")) return;
+        await api("/api/access-requests/reject", { method: "POST", body: JSON.stringify({ sub: d.reject }) });
+        return mountMembers(box, me);
+      }
       if (t.id === "toggleView") { st.view = st.view === "card" ? "table" : "card"; st.editing = null; return mountMembers(box, me); }
       if (t.id === "openAdd") { st.adding = true; return mountMembers(box, me); }
       if (t.id === "cancelAdd") { st.adding = false; return mountMembers(box, me); }

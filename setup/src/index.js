@@ -128,7 +128,7 @@ const STEPS = {
       await q("INSERT INTO d1_migrations (name) VALUES (?)", [m.name]);
     }
     // まだ管理者がいなければ、1回限りの印を作る。鍵を持っている人(＝Cloudflareに登録した人)にだけ渡る
-    if ((await q("SELECT 1 AS x FROM accounts LIMIT 1"))[0].results.length) return {};
+    if ((await q("SELECT 1 AS x FROM accounts UNION ALL SELECT 1 FROM google_accounts LIMIT 1"))[0].results.length) return {};
     const claim = randomToken();
     await q("DELETE FROM setup_claim");
     await q("INSERT INTO setup_claim (code_hash) VALUES (?)", [await sha256(claim)]);

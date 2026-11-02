@@ -20,6 +20,7 @@ const needsSetup = async (db) => !(await db.prepare("SELECT 1 FROM accounts UNIO
 const googleClientId = async (db) => (await db.prepare("SELECT value FROM app_config WHERE key = 'google_client_id'").first())?.value || null;
 const saveClientId = (db, id) => db.prepare("INSERT INTO app_config (key, value) VALUES ('google_client_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(id);
 const GOOGLE_NG = "Googleアカウントを確かめられませんでした。もう一度お試しください";
+const MAX_REQUESTS = 200; // 参加の依頼をためておく上限
 
 // 設置ページで作ったサイトには印がある。印のリンクを持つ人(＝Cloudflareに登録した人)だけが管理者になれる
 const setupClaim = (db) => db.prepare("SELECT code_hash FROM setup_claim LIMIT 1").first();
@@ -81,7 +82,12 @@ app.post("/api/auth/google", async (c) => {
   const g = clientId && await verifyGoogle(b.credential, clientId);
   if (!g) return c.json({ error: GOOGLE_NG }, 400);
   const row = await db.prepare("SELECT m.id, m.active FROM google_accounts g JOIN members m ON m.id = g.member_id WHERE g.sub = ?").bind(g.sub).first();
-  if (!row || !row.active) return c.json({ error: "このGoogleアカウントは、まだ登録されていません。記録係から届いた招待リンクを開いてください" }, 401);
+  if (!row || !row.active) { // はじめての人は依頼を残して、許可を待ってもらう。断られた人の依頼はそのまま
+    const n = await db.prepare("SELECT COUNT(*) AS n FROM access_requests").first();
+    if (n.n < MAX_REQUESTS) await db.prepare("INSERT INTO access_requests (sub, email, name) VALUES (?, ?, ?) ON CONFLICT(sub) DO NOTHING")
+      .bind(g.sub, g.email || "", g.name || "").run();
+    return c.json({ error: "許可を待っています", pending: true, email: g.email || "" }, 403);
+  }
   c.header("Set-Cookie", sessionCookie(await startSession(db, row.id), c.req.raw));
   return c.json({ ok: true });
 });
@@ -113,6 +119,7 @@ app.post("/api/auth/invite/:token", async (c) => {
     await db.batch([
       db.prepare("DELETE FROM google_accounts WHERE member_id = ?").bind(inv.member_id),
       db.prepare("INSERT INTO google_accounts (sub, member_id, email) VALUES (?, ?, ?)").bind(g.sub, inv.member_id, g.email || ""),
+      db.prepare("DELETE FROM access_requests WHERE sub = ?").bind(g.sub),
       db.prepare("UPDATE invites SET used_at = datetime('now') WHERE token_hash = ?").bind(inv.token_hash),
       db.prepare("DELETE FROM login_sessions WHERE member_id = ?").bind(inv.member_id),
     ]);
@@ -157,7 +164,8 @@ app.get("/api/me", async (c) => {
     db.prepare("SELECT name FROM members WHERE is_recorder = 1 AND active = 1 ORDER BY id").all(),
   ]);
   const app = { name: p?.name || "", short: p?.short_name || p?.name || "", recorders: rec.results.map((r) => r.name) };
-  return c.json({ loginId: u.loginId, googleEmail: u.googleEmail, googleClientId: await googleClientId(db), name: u.name, isRecorder: u.isRecorder, isOwner: u.isOwner, memberId: u.memberId, app });
+  const waiting = u.isRecorder ? (await db.prepare("SELECT COUNT(*) AS n FROM access_requests WHERE status = 'pending'").first()).n : 0;
+  return c.json({ waiting, loginId: u.loginId, googleEmail: u.googleEmail, googleClientId: await googleClientId(db), name: u.name, isRecorder: u.isRecorder, isOwner: u.isOwner, memberId: u.memberId, app });
 });
 
 // 自分のGoogleアカウントを結びつける。管理者はクライアントIDの登録・変更もここでする(そのIDでログインできたときだけ保存)
@@ -334,6 +342,45 @@ app.delete("/api/members/:id", requireRecorder, async (c) => {
     c.env.DB.prepare("DELETE FROM invites WHERE member_id = ?").bind(id),
   ]);
   await logChange(c.env.DB, "members", id, "delete", m, null, c.get("user").name);
+  return c.json({ ok: true });
+});
+
+// ---- 参加の許可(記録係のみ) ----
+app.get("/api/access-requests", requireRecorder, async (c) => {
+  const { results } = await c.env.DB.prepare("SELECT sub, email, name, requested_at FROM access_requests WHERE status = 'pending' ORDER BY requested_at").all();
+  return c.json(results);
+});
+
+// 許可する: 名簿の人に結びつける。member_id がなければ、Googleの名前で新しく名簿に足す
+app.post("/api/access-requests/approve", requireRecorder, async (c) => {
+  const db = c.env.DB, b = await c.req.json();
+  const req = await db.prepare("SELECT * FROM access_requests WHERE sub = ? AND status = 'pending'").bind(String(b.sub || "")).first();
+  if (!req) return c.json({ error: "この依頼は見つかりません" }, 404);
+  let id = Number(b.member_id) || null;
+  if (id) {
+    const m = await db.prepare("SELECT m.active, g.sub FROM members m LEFT JOIN google_accounts g ON g.member_id = m.id WHERE m.id = ?").bind(id).first();
+    if (!m || !m.active) return c.json({ error: "名簿にいない人です" }, 404);
+    if (m.sub) return c.json({ error: "この人には、もうGoogleアカウントが結びついています" }, 400);
+  } else if ((id = (await db.prepare("SELECT member_id FROM google_accounts WHERE sub = ?").bind(req.sub).first())?.member_id)) {
+    await db.prepare("UPDATE members SET active = 1 WHERE id = ?").bind(id).run(); // 以前に名簿から外した人は元の名前で戻す
+  } else {
+    const base = req.name || (req.email || "").split("@")[0] || "メンバー";
+    let name = base;
+    for (let i = 2; await db.prepare("SELECT 1 FROM members WHERE name = ?").bind(name).first(); i++) name = `${base}${i}`;
+    id = (await db.prepare("INSERT INTO members (name, display_name, role) VALUES (?, ?, '')").bind(name, name).run()).meta.last_row_id;
+    await logChange(db, "members", id, "create", null, { name }, c.get("user").name);
+  }
+  await db.batch([
+    db.prepare("DELETE FROM google_accounts WHERE sub = ?").bind(req.sub), // 以前に名簿から外した人の結びつきを外す
+    db.prepare("INSERT INTO google_accounts (sub, member_id, email) VALUES (?, ?, ?)").bind(req.sub, id, req.email || ""),
+    db.prepare("DELETE FROM access_requests WHERE sub = ?").bind(req.sub),
+  ]);
+  return c.json({ ok: true, memberId: id });
+});
+
+app.post("/api/access-requests/reject", requireRecorder, async (c) => {
+  const b = await c.req.json();
+  await c.env.DB.prepare("UPDATE access_requests SET status = 'rejected' WHERE sub = ?").bind(String(b.sub || "")).run();
   return c.json({ ok: true });
 });
 
