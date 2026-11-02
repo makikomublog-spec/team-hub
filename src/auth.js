@@ -79,10 +79,11 @@ export async function endSession(db, req) {
 export async function loadUser(db, req) {
   const token = cookieValue(req, COOKIE);
   if (!token) return null;
-  const row = await db.prepare(`SELECT m.*, a.login_id FROM login_sessions s JOIN members m ON m.id = s.member_id
-    LEFT JOIN accounts a ON a.member_id = m.id WHERE s.token_hash = ? AND s.expires_at > datetime('now')`).bind(await sha256(token)).first();
+  const row = await db.prepare(`SELECT m.*, a.login_id, g.email AS google_email FROM login_sessions s JOIN members m ON m.id = s.member_id
+    LEFT JOIN accounts a ON a.member_id = m.id LEFT JOIN google_accounts g ON g.member_id = m.id
+    WHERE s.token_hash = ? AND s.expires_at > datetime('now')`).bind(await sha256(token)).first();
   if (!row || !row.active) return null; // 名簿から外された人は使えない
-  return { loginId: row.login_id, memberId: row.id, member: row, name: row.name, isRecorder: !!row.is_recorder, isOwner: !!row.is_owner };
+  return { loginId: row.login_id, googleEmail: row.google_email, memberId: row.id, member: row, name: row.name, isRecorder: !!row.is_recorder, isOwner: !!row.is_owner };
 }
 
 // ログインIDとパスワードの確認。続けて10回間違えたら15分ロックする
@@ -100,6 +101,27 @@ export async function login(db, loginId, password) {
   return { memberId: a.member_id };
 }
 
+// ---- Googleログイン ----
+// ブラウザがGoogleから受け取った証明書(ID トークン)を、Googleの公開鍵で確かめる。合っていれば中身を返す
+const GOOGLE_CERTS = "https://www.googleapis.com/oauth2/v3/certs";
+export const validClientId = (id) => /^[\w-]+\.apps\.googleusercontent\.com$/.test(String(id || ""));
+
+export async function verifyGoogle(credential, clientId) {
+  try {
+    const [head, body, sig] = String(credential).split(".");
+    const h = JSON.parse(new TextDecoder().decode(fromB64url(head)));
+    if (h.alg !== "RS256") return null;
+    const jwk = (await (await fetch(GOOGLE_CERTS)).json()).keys.find((k) => k.kid === h.kid);
+    if (!jwk) return null;
+    const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+    if (!(await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, fromB64url(sig), enc.encode(`${head}.${body}`)))) return null;
+    const p = JSON.parse(new TextDecoder().decode(fromB64url(body)));
+    const issOk = p.iss === "https://accounts.google.com" || p.iss === "accounts.google.com";
+    if (!issOk || p.aud !== clientId || !p.sub || !(p.exp * 1000 > Date.now())) return null;
+    return p;
+  } catch { return null; }
+}
+
 // ---- 招待リンク(パスワード再設定にも使う) ----
 export async function createInvite(db, memberId, by) {
   const token = randomToken();
@@ -112,7 +134,7 @@ export async function createInvite(db, memberId, by) {
 }
 
 export async function findInvite(db, token) {
-  return db.prepare(`SELECT i.*, m.name, m.active, a.login_id FROM invites i JOIN members m ON m.id = i.member_id
-    LEFT JOIN accounts a ON a.member_id = i.member_id
+  return db.prepare(`SELECT i.*, m.name, m.active, a.login_id, g.sub AS google_sub FROM invites i JOIN members m ON m.id = i.member_id
+    LEFT JOIN accounts a ON a.member_id = i.member_id LEFT JOIN google_accounts g ON g.member_id = i.member_id
     WHERE i.token_hash = ? AND i.used_at IS NULL AND i.expires_at > datetime('now')`).bind(await sha256(token)).first();
 }

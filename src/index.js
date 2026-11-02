@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { loadUser, login, startSession, endSession, sessionCookie, clearCookie, hashPassword, checkCredentials, createInvite, findInvite, sha256 } from "./auth.js";
+import { loadUser, login, startSession, endSession, sessionCookie, clearCookie, hashPassword, checkCredentials, createInvite, findInvite, sha256, verifyGoogle, validClientId } from "./auth.js";
 
 const app = new Hono();
 
@@ -14,14 +14,20 @@ app.use("/api/*", async (c, next) => {
 });
 
 // ---- ログイン前に使うもの(最初の設定・ログイン・招待リンク) ----
-const needsSetup = async (db) => !(await db.prepare("SELECT 1 FROM accounts LIMIT 1").first());
+const needsSetup = async (db) => !(await db.prepare("SELECT 1 FROM accounts UNION ALL SELECT 1 FROM google_accounts LIMIT 1").first());
+
+// このツールのGoogleログインの設定(まだなら null)
+const googleClientId = async (db) => (await db.prepare("SELECT value FROM app_config WHERE key = 'google_client_id'").first())?.value || null;
+const saveClientId = (db, id) => db.prepare("INSERT INTO app_config (key, value) VALUES ('google_client_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(id);
+const GOOGLE_NG = "Googleアカウントを確かめられませんでした。もう一度お試しください";
 
 // 設置ページで作ったサイトには印がある。印のリンクを持つ人(＝Cloudflareに登録した人)だけが管理者になれる
 const setupClaim = (db) => db.prepare("SELECT code_hash FROM setup_claim LIMIT 1").first();
 
 app.get("/api/auth/state", async (c) => {
   const needs = await needsSetup(c.env.DB);
-  return c.json({ needsSetup: needs, needsClaim: needs && !!(await setupClaim(c.env.DB)) });
+  const hasPassword = !!(await c.env.DB.prepare("SELECT 1 FROM accounts LIMIT 1").first());
+  return c.json({ needsSetup: needs, needsClaim: needs && !!(await setupClaim(c.env.DB)), googleClientId: await googleClientId(c.env.DB), hasPassword });
 });
 
 // 最初の設定: まだ誰もいないときだけ、プロジェクトと管理者(＝記録係)を作る
@@ -35,15 +41,26 @@ app.post("/api/auth/setup", async (c) => {
   if (!v("name")) return c.json({ error: "あなたの呼び名を入れてください" }, 400);
   const D = /^\d{4}-\d{2}-\d{2}$/;
   if (!D.test(v("start_date")) || !D.test(v("end_date")) || v("start_date") > v("end_date")) return c.json({ error: "期間（開始日〜終了日）を正しく入れてください" }, 400);
-  const err = checkCredentials(v("login_id"), b.password);
-  if (err) return c.json({ error: err }, 400);
-  const hash = await hashPassword(b.password);
+  // Googleで始めるか、IDとパスワードで始めるか
+  let google = null, hash = null;
+  if (b.credential) {
+    if (!validClientId(v("google_client_id"))) return c.json({ error: "クライアントIDが正しくありません" }, 400);
+    google = await verifyGoogle(b.credential, v("google_client_id"));
+    if (!google) return c.json({ error: GOOGLE_NG }, 400);
+  } else {
+    const err = checkCredentials(v("login_id"), b.password);
+    if (err) return c.json({ error: err }, 400);
+    hash = await hashPassword(b.password);
+  }
   const r = await db.prepare("INSERT INTO members (name, display_name, is_recorder, is_owner) VALUES (?, ?, 1, 1)").bind(v("name"), v("name")).run();
   const memberId = r.meta.last_row_id;
   await db.batch([
     db.prepare("INSERT INTO projects (name, short_name, start_date, end_date) VALUES (?, ?, ?, ?)")
       .bind(v("project_name"), v("short_name") || v("project_name"), v("start_date"), v("end_date")),
-    db.prepare("INSERT INTO accounts (member_id, login_id, pass_hash) VALUES (?, ?, ?)").bind(memberId, v("login_id"), hash),
+    ...(google ? [
+      db.prepare("INSERT INTO google_accounts (sub, member_id, email) VALUES (?, ?, ?)").bind(google.sub, memberId, google.email || ""),
+      saveClientId(db, v("google_client_id")),
+    ] : [db.prepare("INSERT INTO accounts (member_id, login_id, pass_hash) VALUES (?, ?, ?)").bind(memberId, v("login_id"), hash)]),
     db.prepare("DELETE FROM setup_claim"),
   ]);
   c.header("Set-Cookie", sessionCookie(await startSession(db, memberId), c.req.raw));
@@ -58,6 +75,17 @@ app.post("/api/auth/login", async (c) => {
   return c.json({ ok: true });
 });
 
+app.post("/api/auth/google", async (c) => {
+  const db = c.env.DB, b = await c.req.json();
+  const clientId = await googleClientId(db);
+  const g = clientId && await verifyGoogle(b.credential, clientId);
+  if (!g) return c.json({ error: GOOGLE_NG }, 400);
+  const row = await db.prepare("SELECT m.id, m.active FROM google_accounts g JOIN members m ON m.id = g.member_id WHERE g.sub = ?").bind(g.sub).first();
+  if (!row || !row.active) return c.json({ error: "このGoogleアカウントは、まだ登録されていません。記録係から届いた招待リンクを開いてください" }, 401);
+  c.header("Set-Cookie", sessionCookie(await startSession(db, row.id), c.req.raw));
+  return c.json({ ok: true });
+});
+
 app.post("/api/auth/logout", async (c) => {
   await endSession(c.env.DB, c.req.raw);
   c.header("Set-Cookie", clearCookie());
@@ -69,13 +97,28 @@ app.get("/api/auth/invite/:token", async (c) => {
   const inv = await findInvite(c.env.DB, c.req.param("token"));
   if (!inv || !inv.active) return c.json({ error: "このリンクは使えません（期限切れ・使用済み・まちがい）。記録係に新しいリンクをもらってください" }, 404);
   const p = await c.env.DB.prepare("SELECT name FROM projects ORDER BY id LIMIT 1").first();
-  return c.json({ name: inv.name, loginId: inv.login_id || "", reset: !!inv.login_id, project: p?.name || "" });
+  return c.json({ name: inv.name, loginId: inv.login_id || "", reset: !!inv.login_id || !!inv.google_sub, project: p?.name || "", googleClientId: await googleClientId(c.env.DB) });
 });
 
 app.post("/api/auth/invite/:token", async (c) => {
   const db = c.env.DB, b = await c.req.json();
   const inv = await findInvite(db, c.req.param("token"));
   if (!inv || !inv.active) return c.json({ error: "このリンクは使えません。記録係に新しいリンクをもらってください" }, 404);
+  if (b.credential) { // Googleアカウントで参加する(付け替えにも使う)
+    const clientId = await googleClientId(db);
+    const g = clientId && await verifyGoogle(b.credential, clientId);
+    if (!g) return c.json({ error: GOOGLE_NG }, 400);
+    const used = await db.prepare("SELECT member_id FROM google_accounts WHERE sub = ?").bind(g.sub).first();
+    if (used && used.member_id !== inv.member_id) return c.json({ error: "このGoogleアカウントは、ほかのメンバーが使っています。別のアカウントを選んでください" }, 400);
+    await db.batch([
+      db.prepare("DELETE FROM google_accounts WHERE member_id = ?").bind(inv.member_id),
+      db.prepare("INSERT INTO google_accounts (sub, member_id, email) VALUES (?, ?, ?)").bind(g.sub, inv.member_id, g.email || ""),
+      db.prepare("UPDATE invites SET used_at = datetime('now') WHERE token_hash = ?").bind(inv.token_hash),
+      db.prepare("DELETE FROM login_sessions WHERE member_id = ?").bind(inv.member_id),
+    ]);
+    c.header("Set-Cookie", sessionCookie(await startSession(db, inv.member_id), c.req.raw));
+    return c.json({ ok: true });
+  }
   const loginId = inv.login_id || String(b.login_id || "").trim();
   const err = checkCredentials(loginId, b.password);
   if (err) return c.json({ error: err }, 400);
@@ -114,7 +157,26 @@ app.get("/api/me", async (c) => {
     db.prepare("SELECT name FROM members WHERE is_recorder = 1 AND active = 1 ORDER BY id").all(),
   ]);
   const app = { name: p?.name || "", short: p?.short_name || p?.name || "", recorders: rec.results.map((r) => r.name) };
-  return c.json({ loginId: u.loginId, name: u.name, isRecorder: u.isRecorder, isOwner: u.isOwner, memberId: u.memberId, app });
+  return c.json({ loginId: u.loginId, googleEmail: u.googleEmail, googleClientId: await googleClientId(db), name: u.name, isRecorder: u.isRecorder, isOwner: u.isOwner, memberId: u.memberId, app });
+});
+
+// 自分のGoogleアカウントを結びつける。管理者はクライアントIDの登録・変更もここでする(そのIDでログインできたときだけ保存)
+app.post("/api/me/google", async (c) => {
+  const db = c.env.DB, u = c.get("user"), b = await c.req.json();
+  const given = String(b.google_client_id || "").trim();
+  if (given && !u.isOwner) return c.json({ error: "クライアントIDの設定は管理者だけができます" }, 403);
+  if (given && !validClientId(given)) return c.json({ error: "クライアントIDが正しくありません" }, 400);
+  const clientId = given || await googleClientId(db);
+  const g = clientId && await verifyGoogle(b.credential, clientId);
+  if (!g) return c.json({ error: GOOGLE_NG }, 400);
+  const used = await db.prepare("SELECT member_id FROM google_accounts WHERE sub = ?").bind(g.sub).first();
+  if (used && used.member_id !== u.memberId) return c.json({ error: "このGoogleアカウントは、ほかのメンバーが使っています。別のアカウントを選んでください" }, 400);
+  await db.batch([
+    ...(given ? [saveClientId(db, given)] : []),
+    db.prepare("DELETE FROM google_accounts WHERE member_id = ?").bind(u.memberId),
+    db.prepare("INSERT INTO google_accounts (sub, member_id, email) VALUES (?, ?, ?)").bind(g.sub, u.memberId, g.email || ""),
+  ]);
+  return c.json({ ok: true });
 });
 
 // 自分のパスワードを変える
@@ -209,7 +271,8 @@ app.get("/api/projects/:id", async (c) => {
 // ---- メンバー ----
 app.get("/api/members", async (c) => {
   // 通常は名簿にいる人だけ。?all=1 で外した人も含める(過去の議事録の表示用)
-  const sql = `SELECT m.*, a.login_id IS NOT NULL AS has_account FROM members m LEFT JOIN accounts a ON a.member_id = m.id
+  const sql = `SELECT m.*, (a.login_id IS NOT NULL OR g.sub IS NOT NULL) AS has_account FROM members m
+    LEFT JOIN accounts a ON a.member_id = m.id LEFT JOIN google_accounts g ON g.member_id = m.id
     ${c.req.query("all") ? "" : "WHERE m.active = 1"} ORDER BY m.id`;
   const { results } = await c.env.DB.prepare(sql).all();
   return c.json(results);

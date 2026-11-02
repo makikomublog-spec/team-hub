@@ -469,10 +469,10 @@ async function route() {
       try { me = await api("/api/me"); }
       catch (err) {
         if (err.status !== 401) throw err;
-        const { needsSetup, needsClaim } = await api("/api/auth/state");
+        const { needsSetup, needsClaim, googleClientId, hasPassword } = await api("/api/auth/state");
         document.title = needsSetup ? "はじめての設定" : "ログイン";
         if (needsClaim && !(page === "claim" && id)) return renderNeedClaim($app);
-        return needsSetup ? renderSetup($app, page === "claim" ? id : "") : renderLogin($app);
+        return needsSetup ? renderSetup($app, page === "claim" ? id : "") : renderLogin($app, googleClientId, hasPassword);
       }
       Object.assign(APP, me.app);
       document.querySelector(".brand").textContent = APP.name;

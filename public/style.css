@@ -412,3 +412,15 @@ select.pri-中 { border-color: #c9a227; color: #9a7a10; }
 #authMsg { min-height: 1.2em; margin-top: 6px; }
 .who a { margin-left: 8px; }
 .invitelink { background: #fff8e6; border: 1px solid #f0d58a; border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
+
+/* Googleログイン */
+.gsteps { padding-left: 20px; }
+.gsteps li { margin: 8px 0; }
+.gorigin { margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gorigin code { overflow-wrap: anywhere; }
+.gbox { min-height: 44px; margin: 12px 0; }
+.gsteps p, .gsteps ul { margin: 4px 0; }
+.gbody { margin: 14px 0; }
+.gbody ul { padding-left: 20px; }
+.gnav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.authbox a.btn { display: inline-block; text-decoration: none; }

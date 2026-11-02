@@ -46,7 +46,7 @@ function card(m, me) {
     <div class="mhead"><div class="grow"><div class="label">名前</div><div class="mname">${esc(title)}${tags}</div></div>
       ${me.isRecorder && m.id !== me.memberId ? `<button class="btn sub" data-invite="${m.id}">${m.has_account ? "🔑 再設定リンク" : "✉️ 招待リンク"}</button>` : ""}
       <button class="btn sub" data-edit="${m.id}">編集</button></div>
-    ${st.link?.id === m.id ? `<div class="invitelink"><div class="small">${m.has_account ? "パスワード再設定" : "招待"}リンク（${st.link.days}日間・1回だけ使えます）。コピーして本人だけに送ってください。</div>
+    ${st.link?.id === m.id ? `<div class="invitelink"><div class="small">${m.has_account ? "再設定" : "招待"}リンク（${st.link.days}日間・1回だけ使えます）。コピーして本人だけに送ってください。</div>
       <div class="row"><input class="wide" readonly value="${esc(st.link.url)}"><button class="btn" data-copylink="1">コピー</button></div></div>` : ""}
     <table class="mtable">${rows}</table></div>`;
 }
