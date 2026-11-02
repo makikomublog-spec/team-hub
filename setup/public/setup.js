@@ -13,7 +13,7 @@ const TOKENS_PAGE = "https://dash.cloudflare.com/profile/api-tokens";
 const SIGNUP = "https://dash.cloudflare.com/sign-up";
 
 const TASKS = [
-  ["address", "サイトの住所を用意しています"],
+  ["address", "サイトのドメインを用意しています"],
   ["database", "データの置き場を作っています"],
   ["tables", "データの置き場を整えています"],
   ["storage", "ファイルの置き場を作っています"],
@@ -172,7 +172,7 @@ async function removeRun() {
   s.token = "";
   page(0, `<h1>消しました</h1>
     <p>サイト・データ・ファイルを消しました。もう一度作るときは、このページをはじめから進めてください。</p>
-    <p class="small">住所の名前は、アカウントに残ります。</p>
+    <p class="small">ドメインは、アカウントに残ります。</p>
     ${keyRemoval()}`);
 }
 
@@ -185,7 +185,7 @@ function removeFailed(r, again) {
 const keyRemoval = () => `<p class="small">もう鍵は使いません。下のボタンでCloudflareの画面を開き、<b>team-hub-setup</b> の行の「…」から「Delete（削除）」を押すと消えます。</p>
   <a class="btn sub" href="${TOKENS_PAGE}" target="_blank" rel="noopener">鍵の一覧を開く</a>`;
 
-// 住所の名前を選べるアカウントなら名前の画面へ。途中まで作ってあるときは、住所はもう決まっている
+// ドメインを選べるアカウントなら名前の画面へ。途中まで作ってあるときは、ドメインはもう決まっている
 async function place() {
   if (s.doneTo > 0) return build();
   page(3, `<h1>確かめています…</h1>`);
@@ -196,48 +196,75 @@ async function place() {
     return on("again", place);
   }
   s.current = r.current;
-  if (r.canName) nameForm();
-  else build();
+  s.canName = r.canName;
+  if (!r.canName) build();
+  else if (r.current) domainChoice();
+  else nameForm();
 }
 
-// すでにある住所はこのページから変えられないことがあるので、Cloudflareの画面で変えてもらう
-function changeForm(r, message) {
-  s.current = r.current;
-  page(3, `<h1>住所の名前は、Cloudflareの画面で変えます</h1>
-    <p>${esc(r.message)}まだ何も作っていません。</p>
-    <p>いまの住所</p>
-    <span class="url">https://team-hub.${esc(s.current)}.workers.dev</span>
+const domainUrl = (name) => `https://team-hub.${esc(name)}.workers.dev`;
+const CHANGE_PAGE = () => `https://dash.cloudflare.com/${esc(s.accountId)}/workers/subdomain`;
+
+// すでにあるドメインは Cloudflare の画面でだけ変える。このページで名前を入れさせると、二度入れることになる
+function domainChoice() {
+  page(3, `<h1>サイトのドメインを指定します</h1>
+    <p>ドメインは、サイトのURLの一部です。招待した人にも見えます。</p>
+    <p>いまのドメインだと、URLはこうなります。</p>
+    <span class="url">https://team-hub.<u>${esc(s.current)}</u>.workers.dev</span>
+    <p>下線の部分を変えられます。Cloudflareが自動でつけた名前は、メールアドレスが入っていることがあります。</p>
+    <button class="btn" id="change">ドメインを指定する</button>
+    <button class="btn sub" id="keep">このドメインのまま作る</button>`);
+  on("change", () => domainChange());
+  on("keep", build);
+}
+
+function domainChange(message) {
+  const before = s.current;
+  page(3, `<h1>Cloudflareの画面で、ドメインを指定します</h1>
     ${message ? `<div class="note">${esc(message)}</div>` : ""}
     <ol class="do">
       <li>下の緑のボタンを押します。Cloudflareの画面が別のタブで開きます。
-        <a class="btn" href="https://dash.cloudflare.com/${esc(s.accountId)}/workers/subdomain" target="_blank" rel="noopener">名前を変える画面を開く</a></li>
-      <li>名前に <b class="label">${esc(s.siteName)}</b> と入れて、保存します。「Change」というボタンのときは、それを押してから入れます。</li>
-      <li>このタブに戻って、下の「変えました」を押します。</li>
+        <a class="btn" href="${CHANGE_PAGE()}" target="_blank" rel="noopener">ドメインを変更する画面を開く</a></li>
+      <li><b class="label">Change</b>（変更）を押します。<br><span class="small">見当たらないときは、左の「Workers &amp; Pages」を押すと、「Your subdomain」の横にあります。</span></li>
+      <li>好きな名前を入れて、保存します。<br><span class="small">半角の英語の小文字・数字・「-」で。例：sakura-team<br>メールアドレスや本名は入れないでください。「使えない」と出たら、数字を足します。</span></li>
+      <li>このタブに戻ります。変更できたら、自動で次へ進みます。</li>
     </ol>
-    <button class="btn" id="changed">変えました</button>
-    <button class="btn sub" id="keep">今の住所のまま作る（あとで変えられます）</button>
-    ${r.code ? `<p class="small">（番号：${esc(r.code)}）</p>` : ""}`);
-  on("changed", async (e) => {
-    e.target.disabled = true; e.target.textContent = "確かめています…";
-    const c = await step("place");
-    if (!c.ok) return c.kind === "key" ? (s.token = "", key(c.message)) : changeForm(r, c.message);
-    if (c.current === r.current) return changeForm(r, "まだ前の住所のままのようです。保存できたか確かめて、もう一度押してください。");
-    s.current = c.current; s.siteName = undefined;
-    build();
+    <button class="btn sub" id="changed">変更しました</button>
+    <button class="back" id="back">ひとつ前に戻る</button>`);
+  const watching = () => document.getElementById("changed");
+  const check = async () => {
+    const r = await step("place");
+    if (!watching()) return true;
+    if (r.ok && r.current && r.current !== before) {
+      s.current = r.current;
+      build("ドメインを指定しました。");
+      return true;
+    }
+    if (r.kind === "key") { s.token = ""; key(r.message); return true; }
+    return false;
+  };
+  on("back", domainChoice);
+  on("changed", async () => {
+    if (!await check()) domainChange("まだ前のドメインのままです。Cloudflareの画面で保存できたか確かめて、もう一度押してください。");
   });
-  on("keep", () => { s.siteName = undefined; s.work.nameKept = true; build(); });
+  (async () => {
+    while (watching()) {
+      await new Promise((ok) => setTimeout(ok, 4000));
+      if (!watching() || await check()) return;
+    }
+  })();
 }
 
 function nameForm(message) {
   s.siteName ||= "team-" + crypto.randomUUID().replaceAll("-", "").slice(0, 8);
-  page(3, `<h1>サイトの住所の名前を決めます</h1>
-    <p>住所に入る名前です。招待した人にも見えるので、メールアドレスや本名は入れないでください。</p>
+  page(3, `<h1>サイトのドメインを指定します</h1>
+    <p>ドメインは、サイトのURLの一部です。招待した人にも見えるので、メールアドレスや本名は入れないでください。</p>
     <p>入っている名前のままでも使えます。</p>
     ${message ? `<div class="err">${esc(message)}</div>` : ""}
     <label for="siteName"><b>名前</b></label>
     <input type="text" id="siteName" value="${esc(s.siteName)}" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false">
     <p class="small">半角の英語の小文字・数字・「-」で、32文字まで。例：sakura-team</p>
-    <p>できあがる住所</p>
+    <p>できあがるURL</p>
     <span class="url" id="preview"></span>
     <div id="nameMsg"></div>
     <button class="btn" id="next">この名前で進む</button>
@@ -258,17 +285,18 @@ function nameForm(message) {
   });
 }
 
-function build() {
+function build(done) {
   page(3, `<h1>ツールを作ります</h1>
+    ${typeof done === "string" ? `<div class="note">${esc(done)}</div>` : ""}
     <p>ボタンを押すと、自動で進みます。終わるまでこの画面を閉じないでください。</p>
-    ${!s.siteName && s.current ? `<p>できあがる住所</p><span class="url">https://team-hub.${esc(s.current)}.workers.dev</span>` : ""}
+    ${!s.siteName && s.current ? `<p>できあがるURL</p><span class="url">${domainUrl(s.current)}</span>` : ""}
     <ul class="tasks" id="tasks">${TASKS.map(([k, label]) => `<li data-k="${k}">${label}</li>`).join("")}<li data-k="live">開けるようになるのを待っています</li></ul>
     <div id="buildMsg"></div>
     <button class="btn" id="run">作る</button>
-    ${s.siteName && !s.doneTo ? `<button class="back" id="back">住所の名前を変える</button>` : ""}`);
+    ${s.canName && !s.doneTo ? `<button class="back" id="back">ドメインを指定し直す</button>` : ""}`);
   paint();
   on("run", run);
-  on("back", () => nameForm());
+  on("back", () => (s.current ? domainChoice() : nameForm()));
 }
 
 function paint(doing) {
@@ -300,7 +328,7 @@ async function run() {
     if (r.ok && r.live && await opens()) return finish();
     await new Promise((ok) => setTimeout(ok, 3000));
   }
-  // サイトはできているが、まだ開けない。住所が使えるまで時間がかかることがある
+  // サイトはできているが、まだ開けない。ドメインが使えるまで時間がかかることがある
   finish(true);
 }
 
@@ -323,7 +351,6 @@ async function watchOpen() {
 function fail(r, btn, msg) {
   if (r.kind === "key") { s.token = ""; return key(r.message); }
   if (r.kind === "name") return nameForm(r.message);
-  if (r.kind === "change") return changeForm(r);
   msg.innerHTML = `<div class="err">${esc(r.message)}${r.code ? `<br><span class="small">（番号：${esc(r.code)}）</span>` : ""}</div>`;
   btn.disabled = false; btn.textContent = "もう一度押す";
   paint();
@@ -334,21 +361,24 @@ function finish(slow) {
   page(0, `<h1>🎉 ${s.updating ? "新しい版にしました" : "できました！"}</h1>
     ${s.updating ? `<p>これまでのデータは、そのまま残っています。</p>` : ""}
     ${slow ? `<div class="note" id="slow">サイトは作れましたが、開けるようになるまで、まだ少しかかります。「安全に接続できません」と出ても、壊れてはいません。この画面を開いたまま待つと、開けるようになったらここでお知らせします。</div>` : ""}
-    <p>これが、あなたのツールの住所です。</p>
+    <p>これが、あなたのツールのURLです。</p>
     <span class="url" id="url">${esc(s.url)}</span>
-    ${s.work.nameKept ? `<div class="note">決めていただいた名前にはしていません。名前を変えるときは、Cloudflareの「Workers &amp; Pages」で「Your subdomain」の横の「Change」を押します。メンバーを招待する前に変えてください。${s.work.nameCode ? `<br><span class="small">（番号：${esc(s.work.nameCode)}）</span>` : ""}</div>` : ""}
+    ${s.work.nameKept ? `<div class="note">指定していただいたドメインにはできませんでした。下の「ドメインをあとから変えたいとき」から変えられます。メンバーを招待する前に変えてください。${s.work.nameCode ? `<br><span class="small">（番号：${esc(s.work.nameCode)}）</span>` : ""}</div>` : ""}
     <a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener">ツールを開く</a>
-    <button class="btn sub" id="copy">住所をコピーする</button>
+    <button class="btn sub" id="copy">URLをコピーする</button>
     ${s.updating ? "" : `<div class="note"><b>開いたら、すぐにしてください</b><br>
       ・「はじめての設定」を済ませます。<b>最初に設定した人が管理者になります</b><br>
       ・ブックマークします（${isMac ? "「command」と「D」" : "「Ctrl」と「D」"}を同時に押します）</div>`}
+    <details><summary>ドメインをあとから変えたいとき</summary>
+      <p class="small">下のボタンの画面で「Change」を押して、新しい名前を入れます。作り直す必要はありません。前のURLは使えなくなるので、メンバーには新しいURLを伝え直してください。変更の直後は「安全に接続できません」と出ることがありますが、しばらく待つと開けます。</p>
+      <a class="btn sub" href="${CHANGE_PAGE()}" target="_blank" rel="noopener">ドメインを変更する画面を開く</a></details>
     <details><summary>念のため、鍵を消す（おすすめ）</summary>
       <p class="small">もう鍵は使いません。下のボタンでCloudflareの画面を開き、<b>team-hub-setup</b> の行の「…」から「Delete（削除）」を押すと消えます。消してもツールはそのまま使えます。新しい版にするときは、また作れば大丈夫です。</p>
       <a class="btn sub" href="${TOKENS_PAGE}" target="_blank" rel="noopener">鍵の一覧を開く</a></details>`);
   if (slow) watchOpen();
   on("copy", async (e) => {
     try { await navigator.clipboard.writeText(s.url); e.target.textContent = "✓ コピーしました"; }
-    catch { e.target.textContent = "コピーできませんでした。上の住所をメモしてください"; }
+    catch { e.target.textContent = "コピーできませんでした。上のURLをメモしてください"; }
   });
 }
 

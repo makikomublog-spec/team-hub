@@ -34,7 +34,7 @@ https://team-hub-setup.makikomublog.workers.dev
 
 1. Cloudflare（ツールを置く場所）に無料登録する
 2. 「鍵」を作って、ページに貼り付ける
-3. サイトの住所の名前を決めて、「作る」を押す
+3. サイトのドメインを指定して、「作る」を押す
 
 作るのはチームで1人だけです。できたら「はじめての設定」を済ませて、ほかの方を招待します。
 
@@ -53,8 +53,8 @@ https://team-hub-setup.makikomublog.workers.dev
 **Q. 新しい版に更新したい**
 設置ページをもう一度はじめから進めてください。データはそのまま残ります。
 
-**Q. 住所の名前をあとから変えたい**
-Cloudflareの管理画面（https://dash.cloudflare.com）の「Workers & Pages」で、「Your subdomain」の横の「Change」を押します。古い住所は使えなくなるので、メンバーには新しい住所を伝え直してください。同じアカウントにほかのサイトがあると、その住所も変わります。
+**Q. ドメインをあとから変えたい**
+Cloudflareの管理画面（https://dash.cloudflare.com）の「Workers & Pages」で、「Your subdomain」の横の「Change」を押します。作り直す必要はありません。前のURLは使えなくなるので、メンバーには新しいURLを伝え直してください。変更の直後は「安全に接続できません」と出ることがありますが、しばらく待つと開けます。同じアカウントにほかのサイトがあると、そのURLも変わります。
 
 **Q. 要らなくなった。消すには？**
 設置ページ（https://team-hub-setup.makikomublog.workers.dev）の「作ったツールを消す」を押して、案内どおりに進めます。**議事録やタスクなどのデータもすべて消え、元に戻せません。** 必要なものは先に控えてください。
