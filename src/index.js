@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { loadUser, login, startSession, endSession, sessionCookie, clearCookie, hashPassword, checkCredentials, createInvite, findInvite } from "./auth.js";
+import { loadUser, login, startSession, endSession, sessionCookie, clearCookie, hashPassword, checkCredentials, createInvite, findInvite, sha256 } from "./auth.js";
 
 const app = new Hono();
 
@@ -16,12 +16,20 @@ app.use("/api/*", async (c, next) => {
 // ---- ログイン前に使うもの(最初の設定・ログイン・招待リンク) ----
 const needsSetup = async (db) => !(await db.prepare("SELECT 1 FROM accounts LIMIT 1").first());
 
-app.get("/api/auth/state", async (c) => c.json({ needsSetup: await needsSetup(c.env.DB) }));
+// 設置ページで作ったサイトには印がある。印のリンクを持つ人(＝Cloudflareに登録した人)だけが管理者になれる
+const setupClaim = (db) => db.prepare("SELECT code_hash FROM setup_claim LIMIT 1").first();
+
+app.get("/api/auth/state", async (c) => {
+  const needs = await needsSetup(c.env.DB);
+  return c.json({ needsSetup: needs, needsClaim: needs && !!(await setupClaim(c.env.DB)) });
+});
 
 // 最初の設定: まだ誰もいないときだけ、プロジェクトと管理者(＝記録係)を作る
 app.post("/api/auth/setup", async (c) => {
   const db = c.env.DB, b = await c.req.json();
   if (!(await needsSetup(db))) return c.json({ error: "すでに設定済みです。ログインしてください" }, 400);
+  const claim = await setupClaim(db);
+  if (claim && claim.code_hash !== await sha256(String(b.claim || ""))) return c.json({ error: "このリンクは使えません。設置ページの完成の画面から開いてください" }, 403);
   const v = (k) => String(b[k] || "").trim();
   if (!v("project_name")) return c.json({ error: "プロジェクト名を入れてください" }, 400);
   if (!v("name")) return c.json({ error: "あなたの呼び名を入れてください" }, 400);
@@ -36,6 +44,7 @@ app.post("/api/auth/setup", async (c) => {
     db.prepare("INSERT INTO projects (name, short_name, start_date, end_date) VALUES (?, ?, ?, ?)")
       .bind(v("project_name"), v("short_name") || v("project_name"), v("start_date"), v("end_date")),
     db.prepare("INSERT INTO accounts (member_id, login_id, pass_hash) VALUES (?, ?, ?)").bind(memberId, v("login_id"), hash),
+    db.prepare("DELETE FROM setup_claim"),
   ]);
   c.header("Set-Cookie", sessionCookie(await startSession(db, memberId), c.req.raw));
   return c.json({ ok: true });

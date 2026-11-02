@@ -22,7 +22,16 @@ function bindForm($app, id, send) {
 const pwFields = `<label class="fld"><span>パスワード</span><input name="password" type="password" autocomplete="new-password" required minlength="8"></label>
   <label class="fld"><span>パスワード（確認）</span><input name="password2" type="password" autocomplete="new-password" required></label>`;
 
-export function renderSetup($app) {
+// 設置ページで作ったサイトを、完成の画面のリンク以外から開いたとき
+export function renderNeedClaim($app) {
+  $app.innerHTML = `<div class="authbox card">
+    <h1>まだ準備中です</h1>
+    <p>管理者の設定は、このツールを作った方だけができます。</p>
+    <p class="small"><b>作った方へ：</b>設置ページの完成の画面にある「ツールを開く」から開いてください。画面を閉じてしまったときは、設置ページをはじめから進めると、もう一度その画面が出ます。データは消えません。</p>
+    <p class="small"><b>招待された方へ：</b>作った方の設定が終わると、招待リンクが届きます。</p></div>`;
+}
+
+export function renderSetup($app, claim = "") {
   const t = today();
   $app.innerHTML = `<div class="authbox card">
     <h1>はじめての設定</h1>
@@ -40,7 +49,7 @@ export function renderSetup($app) {
       <button class="btn">はじめる</button>
     </form></div>`;
   bindForm($app, "setupForm", async (d) => {
-    await api("/api/auth/setup", { method: "POST", body: JSON.stringify(d) });
+    await api("/api/auth/setup", { method: "POST", body: JSON.stringify({ ...d, claim }) });
     location.hash = "#/"; location.reload();
   });
 }

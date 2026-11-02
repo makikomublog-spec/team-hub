@@ -2,6 +2,7 @@
 // ブラウザからCloudflareへ直接は頼めないので、決まった手順だけをここで代わりに行う。
 // 鍵は1回の依頼の間だけメモリにあり、保存も記録もしない。
 import BUNDLE from "./app-bundle.js";
+import { randomToken, sha256 } from "../../src/auth.js";
 
 const WORKER = "team-hub", DB_NAME = "team-hub-db", KV_TITLE = "team-hub-files";
 const ID = /^[A-Za-z0-9-]{8,64}$/;
@@ -126,7 +127,12 @@ const STEPS = {
       await q(m.sql);
       await q("INSERT INTO d1_migrations (name) VALUES (?)", [m.name]);
     }
-    return {};
+    // まだ管理者がいなければ、1回限りの印を作る。鍵を持っている人(＝Cloudflareに登録した人)にだけ渡る
+    if ((await q("SELECT 1 AS x FROM accounts LIMIT 1"))[0].results.length) return {};
+    const claim = randomToken();
+    await q("DELETE FROM setup_claim");
+    await q("INSERT INTO setup_claim (code_hash) VALUES (?)", [await sha256(claim)]);
+    return { claim };
   },
 
   // ファイル置き場

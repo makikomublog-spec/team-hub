@@ -316,8 +316,9 @@ async function run() {
     paint(name);
     const r = await step(name, name === "address" ? { siteName: s.siteName } : {});
     if (!r.ok) return fail(r, btn, msg);
-    const { ok, ...rest } = r;
+    const { ok, claim, ...rest } = r;
     if (name === "database") s.updating = rest.updating;
+    if (claim) { s.claim = claim; s.updating = false; } // 管理者がまだいない
     Object.assign(s.work, rest);
     s.doneTo = i + 1;
   }
@@ -341,7 +342,7 @@ async function watchOpen() {
   while (s.url === url && document.getElementById("slow")) {
     if (await opens()) {
       const note = document.getElementById("slow");
-      if (note) note.textContent = "開けるようになりました。下の「ツールを開く」を押してください。";
+      if (note) note.textContent = "開けるようになりました。下の緑のボタンを押してください。";
       return;
     }
     await new Promise((ok) => setTimeout(ok, 15000));
@@ -364,10 +365,10 @@ function finish(slow) {
     <p>これが、あなたのツールのURLです。</p>
     <span class="url" id="url">${esc(s.url)}</span>
     ${s.work.nameKept ? `<div class="note">指定していただいたドメインにはできませんでした。下の「ドメインをあとから変えたいとき」から変えられます。メンバーを招待する前に変えてください。${s.work.nameCode ? `<br><span class="small">（番号：${esc(s.work.nameCode)}）</span>` : ""}</div>` : ""}
-    <a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener">ツールを開く</a>
+    <a class="btn" href="${esc(s.url)}${s.claim ? `/#/claim/${esc(s.claim)}` : ""}" target="_blank" rel="noopener">${s.claim ? "ツールを開いて管理者になる" : "ツールを開く"}</a>
     <button class="btn sub" id="copy">URLをコピーする</button>
     ${s.updating ? "" : `<div class="note"><b>開いたら、すぐにしてください</b><br>
-      ・「はじめての設定」を済ませます。<b>最初に設定した人が管理者になります</b><br>
+      ・「はじめての設定」を済ませます。<b>この緑のボタンから開いた人だけが管理者になれます</b>。メンバーに知らせるのは、あとで出す招待リンクです<br>
       ・ブックマークします（${isMac ? "「command」と「D」" : "「Ctrl」と「D」"}を同時に押します）</div>`}
     <details><summary>ドメインをあとから変えたいとき</summary>
       <p class="small">下のボタンの画面で「Change」を押して、新しい名前を入れます。作り直す必要はありません。前のURLは使えなくなるので、メンバーには新しいURLを伝え直してください。変更の直後は「安全に接続できません」と出ることがありますが、しばらく待つと開けます。</p>

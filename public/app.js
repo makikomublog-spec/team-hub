@@ -2,7 +2,7 @@ import { api, esc, STATUS_ATT as ATT, APP } from "./common.js";
 import { renderMinutesEditor } from "./editor.js";
 import { renderRecorder } from "./recorder.js";
 import { mountMembers } from "./members.js";
-import { renderSetup, renderLogin, renderInvite, renderSettings } from "./auth-pages.js";
+import { renderSetup, renderNeedClaim, renderLogin, renderInvite, renderSettings } from "./auth-pages.js";
 import { mountSources, renderSourceDetail } from "./sources.js";
 // 画面の表示(ページ切り替えはURLの # 以降で行う)
 const $app = document.getElementById("app");
@@ -469,9 +469,10 @@ async function route() {
       try { me = await api("/api/me"); }
       catch (err) {
         if (err.status !== 401) throw err;
-        const { needsSetup } = await api("/api/auth/state");
+        const { needsSetup, needsClaim } = await api("/api/auth/state");
         document.title = needsSetup ? "はじめての設定" : "ログイン";
-        return needsSetup ? renderSetup($app) : renderLogin($app);
+        if (needsClaim && !(page === "claim" && id)) return renderNeedClaim($app);
+        return needsSetup ? renderSetup($app, page === "claim" ? id : "") : renderLogin($app);
       }
       Object.assign(APP, me.app);
       document.querySelector(".brand").textContent = APP.name;
