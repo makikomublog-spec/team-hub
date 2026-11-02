@@ -73,8 +73,7 @@ export async function mountMembers(box, me) {
       <nav class="mside"><div class="label">メンバー（押すとカードへ）</div>
         ${members.map((m) => `<button class="mjump" data-jump="${m.id}">${esc(m.name)}${m.id === me.memberId ? `<span class="muted small">（自分）</span>` : ""}</button>`).join("")}</nav>
       <div class="mcards">${members.map((m) => card(m, me)).join("")}</div></div>` : table(members)}
-    ${me.isRecorder ? `<p class="muted small">新しい人は「＋ メンバーを追加」→ カードの「✉️ 招待リンク」でリンクを作り、本人に送ります。本人がリンクを開いてログインIDとパスワードを決めると使えるようになります。<br>
-      パスワードを忘れた人には「🔑 再設定リンク」を送ってください。</p>` : ""}`;
+    ${me.isRecorder ? `<p class="muted small">新しい人は「＋ メンバーを追加」→ カードの「✉️ 招待リンク」でリンクを作り、本人に送ります。${me.googleClientId ? "本人がリンクを開いてGoogleのボタンを押すと使えるようになります。<br>\n      ログインできなくなった人には「🔑 再設定リンク」を送ってください。" : "本人がリンクを開いてログインIDとパスワードを決めると使えるようになります。<br>\n      パスワードを忘れた人には「🔑 再設定リンク」を送ってください。"}</p>` : ""}`;
 
   box.onclick = async (e) => {
     const t = e.target, d = t.dataset;
