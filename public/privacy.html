@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プライバシーポリシー</title>
+<link rel="stylesheet" href="/style.css">
+<script>try { document.documentElement.dataset.theme = localStorage.getItem("team-hub-theme") || "green"; } catch {}</script>
+</head>
+<body>
+<!-- Googleログインの公開に必要なページ。ログインしなくても読める -->
+<main>
+<div class="card" style="max-width: 760px; margin: 0 auto;">
+  <h1>プライバシーポリシー</h1>
+  <p class="muted small">このページは、このチーム管理ツール（<span id="host"></span>）での情報の扱いを説明するものです。</p>
+
+  <h2>運営者</h2>
+  <p>このツールは、チームの管理者が自分のCloudflareアカウントで動かしているものです。問い合わせは、チームの管理者にお願いします。</p>
+
+  <h2>Googleログインで受け取る情報</h2>
+  <p>Googleでログインしたときに、Googleアカウントの名前・メールアドレス・アカウントを見分ける番号を受け取ります。ログインした人を見分けるためだけに使います。Googleのパスワードを受け取ることはありません。</p>
+
+  <h2>保存する情報</h2>
+  <ul>
+    <li>メンバーの名前・プロフィールのリンク・アイコンの画像</li>
+    <li>タスク・カレンダー・議事録・資料など、メンバーが入力したりアップロードしたりしたもの</li>
+    <li>録音の文字起こしの結果（録音した音声そのものは保存しません）</li>
+    <li>誰がいつ何を変えたかの記録</li>
+  </ul>
+  <p>これらは、管理者のCloudflareアカウントの中に保存します。録音の文字起こしには、Cloudflareの文字起こしの機能を使います。</p>
+
+  <h2>ほかに渡すこと</h2>
+  <p>保存した情報を、チームの外の人や会社に売ったり渡したりすることはありません。見られるのは、招待されてログインしたメンバーだけです。</p>
+
+  <h2>消してほしいとき</h2>
+  <p>自分の情報を消してほしいときは、チームの管理者に伝えてください。管理者は、名簿から外したり、ツールそのものを消したりできます。</p>
+
+  <p style="margin-top: 28px;"><a href="/">ツールにもどる</a></p>
+</div>
+</main>
+<script>document.getElementById("host").textContent = location.host;</script>
+</body>
+</html>

@@ -47,14 +47,25 @@ async function googleButton(box, clientId, msg, send) {
 
 // Googleの設定の手順。作る人がこのとおりに進めて、クライアントIDを持って帰ってくる
 const CLIENT_PAGE = "https://console.cloud.google.com/auth/clients";
-const originBox = () => `<div class="gorigin"><code>${esc(location.origin)}</code> <button type="button" class="btn sub mini" id="copyOrigin">コピー</button></div>`;
+// コピーボタンつきの文字(Googleの画面に貼り付けるもの)
+const copyBox = (text) => `<div class="gorigin"><code>${esc(text)}</code> <button type="button" class="btn sub mini" data-copy="${esc(text)}">コピー</button></div>`;
+const originBox = () => copyBox(location.origin);
+// Googleの「承認済みドメイン」は、ツールのURLから「team-hub.」を除いた部分(例: sakura-team.workers.dev)
+const appDomain = () => location.hostname.split(".").slice(-3).join(".");
 const GOOGLE_STEPS = [
   { title: "Google Cloud にプロジェクトを作る", url: "https://console.cloud.google.com/projectcreate",
     body: () => `<p>開いた画面で、名前はそのままで「作成」を押します。はじめての方は、先に利用規約の同意が出ます。</p><p>作ったあと、画面の上にそのプロジェクトの名前が出ていれば大丈夫です。</p>` },
   { title: "Googleログインの画面を用意する", url: "https://console.cloud.google.com/auth/overview",
     body: () => `<p>「開始」を押して、順に入れます。</p><ul><li>アプリ名：<b>team-hub</b></li><li>メール：ご自身のアドレスを選ぶ</li><li>対象：<b>外部</b></li></ul><p>最後まで進めて「作成」を押します。</p>` },
+  { title: "ツールのURLを登録する", url: "https://console.cloud.google.com/auth/branding",
+    body: () => `<p>メンバーも使えるようにするには、Googleにツールのページを伝える必要があります。開いた画面で、次の3つを入れます。それぞれ「コピー」を押して貼り付けてください。</p>
+      <p><b>アプリのホームページ</b></p>${copyBox(location.origin)}
+      <p><b>アプリのプライバシー ポリシーへのリンク</b>（このツールに用意してあります）</p>${copyBox(location.origin + "/privacy.html")}
+      <p><b>承認済みドメイン</b>（「ドメインを追加」を押して入れます）</p>${copyBox(appDomain())}
+      <p>「利用規約へのリンク」とロゴは空のままで大丈夫です。いちばん下の「保存」を押します。</p>` },
   { title: "メンバーも使えるようにする", url: "https://console.cloud.google.com/auth/audience",
-    body: () => `<p>「アプリを公開」を押して、確認の画面でも進めます。</p><p>これを押さないと、招待したメンバーがログインできません。</p>` },
+    body: () => `<p>「アプリを公開」を押して、確認の画面でも進めます。</p><p>これを押さないと、招待したメンバーがログインできません。公開しても、招待されていない人はツールに入れません。</p>
+      <p class="muted">「アプリを公開」が押せないときは、ひとつ前の手順の「保存」が済んでいるか確かめてください。</p>` },
   { title: "このツールを登録する", url: `${CLIENT_PAGE}/create`,
     body: () => `<p>種類は「<b>ウェブ アプリケーション</b>」を選びます。</p><p>「承認済みの JavaScript 生成元」の「URI を追加」を押して、次のURLを貼り付けます。</p>${originBox()}<p>最後に「作成」を押します。出てきた「クライアント ID」をコピーしてください。</p>` },
 ];
@@ -62,8 +73,9 @@ const googleSteps = () => `<ol class="gsteps small">${GOOGLE_STEPS.map((s) =>
   `<li><a href="${s.url}" target="_blank" rel="noopener">${s.title}</a>${s.body()}</li>`).join("")}<li>コピーした「クライアント ID」を下に貼り付けます。</li></ol>`;
 
 function bindCopyOrigin($app) {
-  const b = $app.querySelector("#copyOrigin");
-  if (b) b.onclick = async () => { await navigator.clipboard.writeText(location.origin); b.textContent = "✓ コピーしました"; };
+  $app.querySelectorAll("[data-copy]").forEach((b) => {
+    b.onclick = async () => { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "✓ コピーしました"; };
+  });
 }
 
 // クライアントIDが貼られたらボタンを出す
