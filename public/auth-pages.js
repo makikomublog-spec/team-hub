@@ -90,7 +90,7 @@ export function renderNeedClaim($app) {
     <h1>まだ準備中です</h1>
     <p>管理者の設定は、このツールを作った方だけができます。</p>
     <p class="small"><b>作った方へ：</b>設置ページの完成の画面にある「ツールを開く」から開いてください。画面を閉じてしまったときは、設置ページをはじめから進めると、もう一度その画面が出ます。データは消えません。</p>
-    <p class="small"><b>メンバーの方へ：</b>作った方の設定が終わると、入れるようになります。</p></div>`;
+    <p class="small"><b>招待された方へ：</b>作った方の設定が終わると、招待リンクが届きます。</p></div>`;
 }
 
 export function renderSetup($app, claim = "") {
@@ -119,7 +119,7 @@ export function renderSetup($app, claim = "") {
   const intro = () => {
     show(`<h1>Googleログインの準備</h1>
       <p>ご自身のGoogleアカウントで、このツール専用のログインの入口を作ります。ツールを作る方が最初に1回だけします。</p>
-      <p class="small">無料です。メンバーの方はこの作業をしなくても、Googleのボタンを押して管理者の許可を待つだけで入れます。</p>
+      <p class="small">無料です。メンバーの方はこの作業をしなくても、招待リンクからGoogleのボタンを押すだけで入れます。</p>
       <p class="small">このあとの画面でボタンを押すと、Googleの画面が新しいタブで開きます。終わったら、このタブに戻ってきてください。</p>
       <div class="gnav"><button class="btn" id="next">はじめる</button><button class="btn sub" id="back">もどる</button></div>`);
     $app.querySelector("#next").onclick = () => step(0);
@@ -171,7 +171,7 @@ export function renderLogin($app, clientId = null, hasPassword = true) {
     <h1>ログイン</h1>
     ${clientId ? `<div id="googleBox" class="gbox"></div><div id="authMsg" class="late"></div>
       ${hasPassword ? `<details class="small"><summary>ログインIDとパスワードで入る</summary>${form}</details>` : ""}` : `${form}<div id="authMsg" class="late"></div>`}
-    <p class="muted small">${clientId ? "はじめての方も、Googleのボタンを押してください。管理者が許可すると入れます。" : "はじめての人は、記録係から届いた招待リンクを開いてください。パスワードを忘れたときは、記録係に再設定リンクを作ってもらってください。"}</p>
+    <p class="muted small">はじめての人は、記録係から届いた招待リンクを開いてください。${clientId ? "" : "パスワードを忘れたときは、記録係に再設定リンクを作ってもらってください。"}</p>
     ${clientId ? googleHelp : ""}</div>`;
   const done = () => { location.hash = "#/"; location.reload(); };
   if (!clientId || hasPassword) bindForm($app, "loginForm", async (d) => {
@@ -179,14 +179,7 @@ export function renderLogin($app, clientId = null, hasPassword = true) {
     done();
   });
   if (clientId) googleButton($app.querySelector("#googleBox"), clientId, $app.querySelector("#authMsg"), async (credential) => {
-    try { await api("/api/auth/google", { method: "POST", body: JSON.stringify({ credential }) }); }
-    catch (err) {
-      if (err.status !== 403) throw err;
-      $app.innerHTML = `<div class="authbox card"><h1>許可を待っています</h1>
-        <p>参加の依頼を送りました。管理者が許可すると入れます。</p>
-        <p class="small">管理者に、依頼を送ったことを伝えておくと早く進みます。許可されたら、このページを開き直して、Googleのボタンをもう一度押してください。</p></div>`;
-      return;
-    }
+    await api("/api/auth/google", { method: "POST", body: JSON.stringify({ credential }) });
     done();
   });
 }

@@ -5,15 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>プロジェクト管理</title>
 <link rel="stylesheet" href="/style.css">
+<script>try { document.documentElement.dataset.theme = localStorage.getItem("team-hub-theme") || "green"; } catch {}</script>
 </head>
 <body>
 <header class="top">
   <a href="#/" class="brand"></a>
   <span id="who" class="who"></span>
+  <details id="themepick" class="themepick small"></details>
 </header>
 <main id="app"><p class="muted">読み込み中…</p></main>
 <script src="/vendor/fullcalendar.global.min.js"></script>
 <script src="/vendor/fullcalendar-ja.global.min.js"></script>
+<script type="module" src="/theme.js"></script>
 <script type="module" src="/app.js"></script>
 </body>
 </html>

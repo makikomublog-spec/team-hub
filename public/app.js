@@ -476,7 +476,7 @@ async function route() {
       }
       Object.assign(APP, me.app);
       document.querySelector(".brand").textContent = APP.name;
-      document.getElementById("who").innerHTML = `${me.waiting ? `<a href="#/p/${PROJECT_ID}/members" class="tag y">参加の依頼 ${me.waiting}件</a> ` : ""}${esc(me.name)}${me.isRecorder ? "（記録係）" : ""}
+      document.getElementById("who").innerHTML = `${esc(me.name)}${me.isRecorder ? "（記録係）" : ""}
         <a href="#/settings" class="small">設定</a> <a href="#" id="logout" class="small">ログアウト</a>`;
       document.getElementById("logout").onclick = async (e) => {
         e.preventDefault();

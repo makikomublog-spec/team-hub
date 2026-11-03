@@ -20,7 +20,6 @@ const needsSetup = async (db) => !(await db.prepare("SELECT 1 FROM accounts UNIO
 const googleClientId = async (db) => (await db.prepare("SELECT value FROM app_config WHERE key = 'google_client_id'").first())?.value || null;
 const saveClientId = (db, id) => db.prepare("INSERT INTO app_config (key, value) VALUES ('google_client_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(id);
 const GOOGLE_NG = "Googleアカウントを確かめられませんでした。もう一度お試しください";
-const MAX_REQUESTS = 200; // 参加の依頼をためておく上限
 
 // 設置ページで作ったサイトには印がある。印のリンクを持つ人(＝Cloudflareに登録した人)だけが管理者になれる
 const setupClaim = (db) => db.prepare("SELECT code_hash FROM setup_claim LIMIT 1").first();
@@ -82,12 +81,7 @@ app.post("/api/auth/google", async (c) => {
   const g = clientId && await verifyGoogle(b.credential, clientId);
   if (!g) return c.json({ error: GOOGLE_NG }, 400);
   const row = await db.prepare("SELECT m.id, m.active FROM google_accounts g JOIN members m ON m.id = g.member_id WHERE g.sub = ?").bind(g.sub).first();
-  if (!row || !row.active) { // はじめての人は依頼を残して、許可を待ってもらう。断られた人の依頼はそのまま
-    const n = await db.prepare("SELECT COUNT(*) AS n FROM access_requests").first();
-    if (n.n < MAX_REQUESTS) await db.prepare("INSERT INTO access_requests (sub, email, name) VALUES (?, ?, ?) ON CONFLICT(sub) DO NOTHING")
-      .bind(g.sub, g.email || "", g.name || "").run();
-    return c.json({ error: "許可を待っています", pending: true, email: g.email || "" }, 403);
-  }
+  if (!row || !row.active) return c.json({ error: "このGoogleアカウントは、まだ登録されていません。記録係から届いた招待リンクを開いてください" }, 401);
   c.header("Set-Cookie", sessionCookie(await startSession(db, row.id), c.req.raw));
   return c.json({ ok: true });
 });
@@ -119,7 +113,6 @@ app.post("/api/auth/invite/:token", async (c) => {
     await db.batch([
       db.prepare("DELETE FROM google_accounts WHERE member_id = ?").bind(inv.member_id),
       db.prepare("INSERT INTO google_accounts (sub, member_id, email) VALUES (?, ?, ?)").bind(g.sub, inv.member_id, g.email || ""),
-      db.prepare("DELETE FROM access_requests WHERE sub = ?").bind(g.sub),
       db.prepare("UPDATE invites SET used_at = datetime('now') WHERE token_hash = ?").bind(inv.token_hash),
       db.prepare("DELETE FROM login_sessions WHERE member_id = ?").bind(inv.member_id),
     ]);
@@ -164,8 +157,7 @@ app.get("/api/me", async (c) => {
     db.prepare("SELECT name FROM members WHERE is_recorder = 1 AND active = 1 ORDER BY id").all(),
   ]);
   const app = { name: p?.name || "", short: p?.short_name || p?.name || "", recorders: rec.results.map((r) => r.name) };
-  const waiting = u.isRecorder ? (await db.prepare("SELECT COUNT(*) AS n FROM access_requests WHERE status = 'pending'").first()).n : 0;
-  return c.json({ waiting, loginId: u.loginId, googleEmail: u.googleEmail, googleClientId: await googleClientId(db), name: u.name, isRecorder: u.isRecorder, isOwner: u.isOwner, memberId: u.memberId, app });
+  return c.json({ loginId: u.loginId, googleEmail: u.googleEmail, googleClientId: await googleClientId(db), name: u.name, isRecorder: u.isRecorder, isOwner: u.isOwner, memberId: u.memberId, app });
 });
 
 // 自分のGoogleアカウントを結びつける。管理者はクライアントIDの登録・変更もここでする(そのIDでログインできたときだけ保存)
@@ -279,8 +271,9 @@ app.get("/api/projects/:id", async (c) => {
 // ---- メンバー ----
 app.get("/api/members", async (c) => {
   // 通常は名簿にいる人だけ。?all=1 で外した人も含める(過去の議事録の表示用)
-  const sql = `SELECT m.*, (a.login_id IS NOT NULL OR g.sub IS NOT NULL) AS has_account FROM members m
+  const sql = `SELECT m.*, (a.login_id IS NOT NULL OR g.sub IS NOT NULL) AS has_account, i.updated_at AS icon_at FROM members m
     LEFT JOIN accounts a ON a.member_id = m.id LEFT JOIN google_accounts g ON g.member_id = m.id
+    LEFT JOIN member_icons i ON i.member_id = m.id
     ${c.req.query("all") ? "" : "WHERE m.active = 1"} ORDER BY m.id`;
   const { results } = await c.env.DB.prepare(sql).all();
   return c.json(results);
@@ -329,6 +322,39 @@ app.patch("/api/members/:id", async (c) => {
   return c.json(await c.env.DB.prepare("SELECT * FROM members WHERE id = ?").bind(id).first());
 });
 
+// キャラクターアイコン(全員が付け替えられる)。画像はブラウザで小さくしてから送る
+const ICON_TYPES = ["image/webp", "image/png", "image/jpeg"];
+const ICON_MAX = 400 * 1024;
+
+app.get("/api/members/:id/icon", async (c) => {
+  const row = await c.env.DB.prepare("SELECT mime, data FROM member_icons WHERE member_id = ?").bind(Number(c.req.param("id"))).first();
+  if (!row) return c.json({ error: "アイコンがありません" }, 404);
+  const bytes = Uint8Array.from(atob(row.data), (ch) => ch.charCodeAt(0));
+  // URLに更新日時を付けて読むので、長く覚えておいてよい
+  return new Response(bytes, { headers: { "Content-Type": row.mime, "Cache-Control": "private, max-age=31536000, immutable" } });
+});
+
+app.put("/api/members/:id/icon", async (c) => {
+  const id = Number(c.req.param("id"));
+  const m = await c.env.DB.prepare("SELECT id FROM members WHERE id = ? AND active = 1").bind(id).first();
+  if (!m) return c.json({ error: "名簿にいない人です" }, 404);
+  const b = await c.req.json();
+  const data = String(b.data || "");
+  if (!ICON_TYPES.includes(b.mime) || !/^[A-Za-z0-9+/]+=*$/.test(data)) return c.json({ error: "画像を読み取れませんでした" }, 400);
+  if (data.length * 3 / 4 > ICON_MAX) return c.json({ error: "画像が大きすぎます" }, 400);
+  await c.env.DB.prepare(`INSERT INTO member_icons (member_id, mime, data, updated_at) VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(member_id) DO UPDATE SET mime = excluded.mime, data = excluded.data, updated_at = excluded.updated_at`).bind(id, b.mime, data).run();
+  await logChange(c.env.DB, "members", id, "update", null, { icon: "変更" }, c.get("user").name);
+  return c.json({ ok: true });
+});
+
+app.delete("/api/members/:id/icon", async (c) => {
+  const id = Number(c.req.param("id"));
+  await c.env.DB.prepare("DELETE FROM member_icons WHERE member_id = ?").bind(id).run();
+  await logChange(c.env.DB, "members", id, "update", null, { icon: "外した" }, c.get("user").name);
+  return c.json({ ok: true });
+});
+
 // 名簿から外す(記録係のみ)。過去の議事録・出欠・タスクの名前は残し、ログインもできなくなる
 app.delete("/api/members/:id", requireRecorder, async (c) => {
   const id = Number(c.req.param("id"));
@@ -342,45 +368,6 @@ app.delete("/api/members/:id", requireRecorder, async (c) => {
     c.env.DB.prepare("DELETE FROM invites WHERE member_id = ?").bind(id),
   ]);
   await logChange(c.env.DB, "members", id, "delete", m, null, c.get("user").name);
-  return c.json({ ok: true });
-});
-
-// ---- 参加の許可(記録係のみ) ----
-app.get("/api/access-requests", requireRecorder, async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT sub, email, name, requested_at FROM access_requests WHERE status = 'pending' ORDER BY requested_at").all();
-  return c.json(results);
-});
-
-// 許可する: 名簿の人に結びつける。member_id がなければ、Googleの名前で新しく名簿に足す
-app.post("/api/access-requests/approve", requireRecorder, async (c) => {
-  const db = c.env.DB, b = await c.req.json();
-  const req = await db.prepare("SELECT * FROM access_requests WHERE sub = ? AND status = 'pending'").bind(String(b.sub || "")).first();
-  if (!req) return c.json({ error: "この依頼は見つかりません" }, 404);
-  let id = Number(b.member_id) || null;
-  if (id) {
-    const m = await db.prepare("SELECT m.active, g.sub FROM members m LEFT JOIN google_accounts g ON g.member_id = m.id WHERE m.id = ?").bind(id).first();
-    if (!m || !m.active) return c.json({ error: "名簿にいない人です" }, 404);
-    if (m.sub) return c.json({ error: "この人には、もうGoogleアカウントが結びついています" }, 400);
-  } else if ((id = (await db.prepare("SELECT member_id FROM google_accounts WHERE sub = ?").bind(req.sub).first())?.member_id)) {
-    await db.prepare("UPDATE members SET active = 1 WHERE id = ?").bind(id).run(); // 以前に名簿から外した人は元の名前で戻す
-  } else {
-    const base = req.name || (req.email || "").split("@")[0] || "メンバー";
-    let name = base;
-    for (let i = 2; await db.prepare("SELECT 1 FROM members WHERE name = ?").bind(name).first(); i++) name = `${base}${i}`;
-    id = (await db.prepare("INSERT INTO members (name, display_name, role) VALUES (?, ?, '')").bind(name, name).run()).meta.last_row_id;
-    await logChange(db, "members", id, "create", null, { name }, c.get("user").name);
-  }
-  await db.batch([
-    db.prepare("DELETE FROM google_accounts WHERE sub = ?").bind(req.sub), // 以前に名簿から外した人の結びつきを外す
-    db.prepare("INSERT INTO google_accounts (sub, member_id, email) VALUES (?, ?, ?)").bind(req.sub, id, req.email || ""),
-    db.prepare("DELETE FROM access_requests WHERE sub = ?").bind(req.sub),
-  ]);
-  return c.json({ ok: true, memberId: id });
-});
-
-app.post("/api/access-requests/reject", requireRecorder, async (c) => {
-  const b = await c.req.json();
-  await c.env.DB.prepare("UPDATE access_requests SET status = 'rejected' WHERE sub = ?").bind(String(b.sub || "")).run();
   return c.json({ ok: true });
 });
 
