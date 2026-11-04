@@ -52,25 +52,40 @@ const copyBox = (text) => `<div class="gorigin"><code>${esc(text)}</code> <butto
 const originBox = () => copyBox(location.origin);
 // Googleの「承認済みドメイン」は、ツールのURLから「team-hub.」を除いた部分(例: sakura-team.workers.dev)
 const appDomain = () => location.hostname.split(".").slice(-3).join(".");
+// start=開いたときの画面、end=終わったときの画面。どこから始まりどこで終わるかを毎回はっきり書く
 const GOOGLE_STEPS = [
   { title: "Google Cloud にプロジェクトを作る", url: "https://console.cloud.google.com/projectcreate",
-    body: () => `<p>開いた画面で、名前はそのままで「作成」を押します。はじめての方は、先に利用規約の同意が出ます。</p><p>作ったあと、画面の上にそのプロジェクトの名前が出ていれば大丈夫です。</p>` },
+    start: "「新しいプロジェクト」の画面が開きます。はじめての方は、先に利用規約の同意が出ます。",
+    body: () => `<p>名前はそのままで「作成」を押します。</p>`,
+    end: "画面の左上に、作ったプロジェクトの名前（「My Project 12345」など）が出たら終わりです。" },
   { title: "Googleログインの画面を用意する", url: "https://console.cloud.google.com/auth/overview",
-    body: () => `<p>「開始」を押して、順に入れます。</p><ul><li>アプリ名：<b>team-hub</b></li><li>メール：ご自身のアドレスを選ぶ</li><li>対象：<b>外部</b></li></ul><p>最後まで進めて「作成」を押します。</p>` },
+    start: "「Google Auth Platform はまだ構成されていません」と「開始」のボタンが出ます。",
+    body: () => `<p>「開始」を押して、順に入れます。</p><ul><li>アプリ名：<b>team-hub</b></li><li>メール：ご自身のアドレスを選ぶ</li><li>対象：<b>外部</b></li><li>連絡先：ご自身のアドレスを入れる</li></ul><p>最後まで進めて「作成」を押します。</p>`,
+    end: "「OAuth の構成を作成しました」と出て、「OAuth の概要」の画面に変わったら終わりです。この画面では何も押しません（「OAuth クライアントを作成」は、あとの手順で開きます）。" },
   { title: "ツールのURLを登録する", url: "https://console.cloud.google.com/auth/branding",
-    body: () => `<p>メンバーも使えるようにするには、Googleにツールのページを伝える必要があります。開いた画面で、次の3つを入れます。それぞれ「コピー」を押して貼り付けてください。</p>
+    start: "「ブランディング」の画面が開きます。アプリ名（team-hub）が入っています。",
+    body: () => `<p>メンバーも使えるようにするには、Googleにツールのページを伝える必要があります。次の3つを、「コピー」を押して貼り付けます。</p>
       <p><b>アプリのホームページ</b></p>${copyBox(location.origin)}
       <p><b>アプリのプライバシー ポリシーへのリンク</b>（このツールに用意してあります）</p>${copyBox(location.origin + "/privacy.html")}
       <p><b>承認済みドメイン</b>（「ドメインを追加」を押して入れます）</p>${copyBox(appDomain())}
-      <p>「利用規約へのリンク」とロゴは空のままで大丈夫です。いちばん下の「保存」を押します。</p>` },
+      <p>「利用規約へのリンク」とロゴは空のままで大丈夫です。いちばん下の「保存」を押します。</p>`,
+    end: "「保存」を押して、エラーの赤い文字が出なければ終わりです。" },
   { title: "メンバーも使えるようにする", url: "https://console.cloud.google.com/auth/audience",
+    start: "「対象」の画面が開きます。「公開ステータス」が「テスト中」になっています。",
     body: () => `<p>「アプリを公開」を押して、確認の画面でも進めます。</p><p>これを押さないと、招待したメンバーがログインできません。公開しても、招待されていない人はツールに入れません。</p>
-      <p class="muted">「アプリを公開」が押せないときは、ひとつ前の手順の「保存」が済んでいるか確かめてください。</p>` },
+      <p class="muted">「アプリを公開」が押せないときは、ひとつ前の手順の「保存」が済んでいるか確かめてください。</p>`,
+    end: "「公開ステータス」が「本番環境」に変わったら終わりです。" },
   { title: "このツールを登録する", url: `${CLIENT_PAGE}/create`,
-    body: () => `<p>種類は「<b>ウェブ アプリケーション</b>」を選びます。</p><p>「承認済みの JavaScript 生成元」の「URI を追加」を押して、次のURLを貼り付けます。</p>${originBox()}<p>最後に「作成」を押します。出てきた「クライアント ID」をコピーしてください。</p>` },
+    start: "「OAuth クライアント ID の作成」の画面が開きます。",
+    body: () => `<p>種類は「<b>ウェブ アプリケーション</b>」を選びます。</p><p>「承認済みの JavaScript 生成元」の「URI を追加」を押して、次のURLを貼り付けます。</p>${originBox()}<p>最後に「作成」を押します。</p>`,
+    end: "「OAuth クライアントを作成しました」の窓に「クライアント ID」（「.apps.googleusercontent.com」で終わる文字）が出たら、横のコピーのボタンを押します。コピーできたら終わりです。",
+    close: "コピーしたあとなら、Googleのタブは閉じて大丈夫です。" },
 ];
+const CLOSE_TAB = "Googleのタブは閉じて大丈夫です。";
+const stepText = (s) => `<p class="gstart"><b>はじめ：</b>${s.start}</p>${s.body()}
+  <p class="gend"><b>終わり：</b>${s.end}${s.close || CLOSE_TAB}</p>`;
 const googleSteps = () => `<ol class="gsteps small">${GOOGLE_STEPS.map((s) =>
-  `<li><a href="${s.url}" target="_blank" rel="noopener">${s.title}</a>${s.body()}</li>`).join("")}<li>コピーした「クライアント ID」を下に貼り付けます。</li></ol>`;
+  `<li><a href="${s.url}" target="_blank" rel="noopener">${s.title}</a>${stepText(s)}</li>`).join("")}<li>コピーした「クライアント ID」を下に貼り付けます。</li></ol>`;
 
 function bindCopyOrigin($app) {
   $app.querySelectorAll("[data-copy]").forEach((b) => {
@@ -132,7 +147,7 @@ export function renderSetup($app, claim = "") {
     show(`<h1>Googleログインの準備</h1>
       <p>ご自身のGoogleアカウントで、このツール専用のログインの入口を作ります。ツールを作る方が最初に1回だけします。</p>
       <p class="small">無料です。メンバーの方はこの作業をしなくても、招待リンクからGoogleのボタンを押すだけで入れます。</p>
-      <p class="small">このあとの画面でボタンを押すと、Googleの画面が新しいタブで開きます。終わったら、このタブに戻ってきてください。</p>
+      <p class="small">このあとの画面でボタンを押すと、Googleの画面が新しいタブで開きます。手順ごとに「はじめ」と「終わり」の画面を書いてあります。終わりの画面になったら、Googleのタブは閉じて、このタブに戻ってきてください。このタブだけは閉じないでください。</p>
       <div class="gnav"><button class="btn" id="next">はじめる</button><button class="btn sub" id="back">もどる</button></div>`);
     $app.querySelector("#next").onclick = () => step(0);
     $app.querySelector("#back").onclick = names;
@@ -143,7 +158,7 @@ export function renderSetup($app, claim = "") {
     const s = GOOGLE_STEPS[i];
     show(`<p class="small muted">手順 ${i + 1} / ${total}</p><h1>${s.title}</h1>
       <a class="btn" href="${s.url}" target="_blank" rel="noopener">Googleの画面を開く</a>
-      <div class="gbody">${s.body()}</div>
+      <div class="gbody">${stepText(s)}<p>このタブに戻って「できたので次へ」を押します。</p></div>
       <div class="gnav"><button class="btn" id="next">できたので次へ</button><button class="btn sub" id="back">もどる</button></div>`);
     bindCopyOrigin($app);
     $app.querySelector("#next").onclick = () => i + 1 < GOOGLE_STEPS.length ? step(i + 1) : last();

@@ -449,3 +449,5 @@ tr[data-task], .fc { scroll-margin-top: calc(var(--headh, 0px) + 12px); }
 .authbox a.btn { display: inline-block; text-decoration: none; }
 
 select, input, textarea { background-color: var(--card); color: var(--ink); }
+.gstart, .gend { background: var(--g2); border-left: 4px solid var(--g); border-radius: 6px; padding: 8px 12px; }
+.gend { border-left-style: double; border-left-width: 6px; }
